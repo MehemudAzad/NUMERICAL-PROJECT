@@ -1,0 +1,304 @@
+# CLAUDE.md — project context & working agreement
+
+Onboarding for anyone (or any agent) picking up this repo mid-stream. Read this
+first, then skim `docs/cse402_guide.html`.
+
+---
+
+## 1. What this project is
+
+CSE-402 (Numerical Analysis) course project, Section A, ~3 weeks, 5 members.
+Repo: `github.com/MehemudAzad/NUMERICAL-PROJECT`.
+
+**Thesis.** Diffusion image sampling = numerically integrating the probability-flow
+ODE from noise to data, one expensive network call ("NFE") per step. We judge the
+solvers by **numerical-analysis standards** — convergence order, stability limit
+near the stiff boundary `t → 0`, and cost per NFE — not by image-quality scores (FID).
+
+**Base paper.** Lu et al., *DPM-Solver* (NeurIPS 2022, arXiv:2206.00927) —
+`docs/dpm-solver-paper.pdf`. We vendor their solver file unmodified and drive it
+with an analytic oracle so Tiers 1–2 test the *published code* with zero model error.
+
+**THE authoritative plan is `docs/cse402_guide.html`** — a 12-step implementation
+guide (steps 0–11) with all the formulas. `docs/CSE402_Proposal_Deck_v3.pdf` is the
+older proposal; the guide lists 11 corrections to it. `docs/numerical-project.md` is
+a chat log. `docs/general_instructions.md` is the owner's working rules (§2 below).
+
+### Three arms (separating the two ideas in DPM-Solver)
+
+| Arm | Integrates | Grid | Purpose |
+|-----|-----------|------|---------|
+| A | raw PF-ODE in `t` | uniform in `t` | baseline |
+| B | same ODE reparameterised in `λ` (half log-SNR) | uniform in `λ` | isolates the reparameterisation (A vs B) |
+| C | DPM-Solver 1/2/3 — exact on the linear part | uniform in `λ` | isolates the exact linear treatment (B vs C) |
+
+### Three tiers (trading reference exactness for realism)
+
+| Tier | Testbed | Reference | Measures | Runs on |
+|------|---------|-----------|----------|---------|
+| 1 | anisotropic Gaussian, sweep κ = s_max/s_min | closed-form algebra | stability limits | laptop (CPU) |
+| 2 | Gaussian / point mixture | DOP853, rtol 1e-13 | order under curvature | laptop (CPU) |
+| 3 | real CIFAR-10 DDPM UNet `google/ddpm-cifar10-32` | fine-grid, same net | survival vs a real network | **Kaggle T4 GPU** |
+
+### The headline result (M8)
+
+The **crossover**: the step size `h*` below which DPM-Solver-3 beats DPM-Solver-1
+and above which it *loses*. This explains an unexplained blow-up in the paper's own
+Table 6 (order-3 far worse than order-1 at ~10 NFE). Lead with it.
+
+---
+
+## 2. How we work — non-negotiable
+
+From `docs/general_instructions.md` and the owner's direct instructions:
+
+1. **Plan before code.** Present an implementation plan / milestone spec and get
+   **explicit approval** before writing code. This is research work.
+2. **One milestone at a time.** Finish + validate one before starting the next.
+   Every delivered milestone must be runnable by the owner **without the agent's help**.
+3. **Notebooks (`.ipynb`) are the deliverable** for anything that produces results.
+   The engine lives in `src/` (plain Python, unit-tested); notebooks import it, run
+   the sweeps, and write `results/` + `figures/`. Small local sanity checks in the
+   venv are fine.
+4. **Real compute is Kaggle** (T4 GPU; RTX 6000 Pro if needed). Laptops have no CUDA.
+   Only Tier 3 needs a GPU — Tiers 1–2 are pure NumPy.
+5. **The owner runs the code and checks results**, unless they explicitly ask
+   otherwise. The agent's job is correct code + a notebook that demonstrates it.
+6. **The agent never commits.** It provides copy-paste `git add … && git commit`
+   commands; the owner runs them. Work directly on `main` — no feature branches.
+7. **End every response** with three lines: **Purpose/agenda**, **Newly implemented**,
+   **Next steps for me**.
+8. **5-person team, sequential.** One person works at a time and may hand off (this
+   file is the handoff). Don't try to build the whole project in one go.
+
+---
+
+## 3. Environment
+
+Tiers 1 & 2 are CPU-only NumPy — any laptop works.
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m pytest            # from repo root — expect all green
+```
+
+> **If `pip install` fails** with a truststore / `platform.mac_ver()` error: the
+> original owner's Homebrew `python@3.14` is broken on macOS 26. Workaround that
+> machine used: `uv venv --python 3.12 .venv` then `uv pip install -r requirements.txt`.
+> Homebrew `python@3.11` also works. On a normal machine ignore this.
+
+`requirements.txt` is pinned (numpy 2.5.2, scipy 1.18.1, matplotlib, pandas,
+pytest, torch 2.14). Tier-3 extras (`diffusers`, `pytorch-fid`) are commented out —
+they're Kaggle-only.
+
+Notebooks: `jupyter lab notebooks/NN_*.ipynb`, Run All. Each ends with a cell that
+runs its own pytest file and prints `M<n> validation: PASS`.
+
+---
+
+## 4. Repo layout
+
+```
+src/               pure-python engine — NO gpu, NO plotting. Unit-tested.
+  schedule.py      VP-linear noise schedule; λ ↔ t          [M1 ✅]
+  testbeds.py      pf_rhs_t / pf_rhs_lambda + GaussianTier1  [M2 ✅]  (MixtureTier2 → M7)
+  runlog.py        THE results-CSV schema (see §5)           [M0 ✅]
+  solvers.py       arm A steppers + integrate()              [M3]
+  grids.py         grid_t vs grid_lambda                     [M3]
+  dpm.py           arm C: DPM-Solver-1 + DDIM, hand-written  [M4]
+  arm_c.py         wrapper around third_party/ for DPM-2/3   [M4]
+  metrics.py       sliding-window log-log order fitter       [M5]
+  stability.py     bisection for max stable h                [M6]
+tests/             pytest; runs in seconds on the laptop. Gate G1 lives here.
+notebooks/         one NN_*.ipynb per milestone
+third_party/       vendored dpm_solver_pytorch.py (unmodified, pinned commit
+                   8acf2bb, MIT). See third_party/README.md. NEVER edit it —
+                   if a patch is needed, copy to src/dpm_solver_patched.py.
+results/           git-tracked CSVs. Big *.pt/*.npz are gitignored.
+figures/           git-tracked PNGs.
+docs/              the guide, the deck, the paper, the chat log, the rules.
+```
+
+---
+
+## 5. Conventions — agreed at step 0, do not renegotiate
+
+- **float64 everywhere** on Tiers 1 & 2. A float32 ~1e-7 error floor destroys order fits.
+- **Every run seeded.** No exceptions.
+- **One results schema** — `src/runlog.py`, `append_row(csv_path, **fields)`:
+  `tier, testbed, arm, solver, order, kappa, h, nfe, err_l2, diverged, seed`.
+  Every experiment appends rows in this exact shape so tables concatenate.
+- **λ is strictly DECREASING in t.** `t=1` → most negative λ; `t→0` → λ→+∞.
+  Getting this backwards is the single most common bug in this project.
+- **NFE ≠ step count.** RK4 = 4 network calls / step; DPM-Solver-k = k / step.
+  Every cross-arm plot uses measured **NFE**. Use `h` only *within* an arm, for order fits.
+- **Order is defined in `h`, not NFE.** Fit and report both slopes.
+- Arm C `singlestep_fixed` real NFE is `(steps // order) * order` — record the real number.
+
+---
+
+## 6. Status
+
+| # | Milestone | State | Delivered |
+|---|-----------|-------|-----------|
+| M0 | Scaffold, results schema, test wiring, fix vendored solver (was a 404 stub) | ✅ | `src/runlog.py`, `pyproject.toml`, `requirements.txt`, `.gitignore` |
+| M1 | VP-linear noise schedule, λ ↔ t | ✅ | `src/schedule.py`, `tests/test_schedule.py` (7), `notebooks/01_schedule.ipynb` |
+| M2 | Tier-1 Gaussian testbed: exact score + exact trajectory + ODE-consistency gate | ✅ | `src/testbeds.py`, `tests/test_tier1.py` (9), `notebooks/02_tier1_testbed.ipynb` |
+| **M3** | **arm A steppers + arm B grids** | ⬜ **next** | |
+| M4 | arm C (DPM-Solver-1 + authors' code) + **Gate G1** | ⬜ | |
+| M5 | order fitter + Tier-1 convergence experiment (first results/figures) | ⬜ | |
+| M6 | stability envelope, κ sweep | ⬜ | |
+| M7 | Tier-2 mixture testbed + DOP853 reference + order under curvature | ⬜ | |
+| M8 | crossover study (h* where order-3 overtakes order-1) — headline | ⬜ | |
+| M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ | |
+| M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ⬜ | |
+
+`python -m pytest` → **19 passed** as of commit `27dd657`.
+
+Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
+~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
+`schedule.py` agrees with the vendored `NoiseScheduleVP('linear')` to 1e-11 (so
+arms A/B and arm C provably share one schedule).
+
+---
+
+## 7. Milestone specs (M3 onward)
+
+Each milestone = `src/` module(s) + `tests/test_*.py` + `notebooks/NN_*.ipynb` that
+ends with an inline pytest cell. Follow the guide step in parentheses.
+
+### M3 — arm A solvers + arm B grids  (guide steps 3–4)
+
+`src/solvers.py`:
+- `euler, midpoint, heun3, rk4` — **exactly the paper's Appendix E.4 schemes**:
+  explicit **midpoint** for RK2; **Heun's 3rd-order with r₁=1/3, r₂=2/3** for RK3
+  (this mirrors DPM-Solver-3 — generic Heun/RK4 would break comparability with Table 1).
+- `NFE_PER_STEP = {euler:1, midpoint:2, heun3:3, rk4:4}`, `STEPPERS = {...}`.
+- `integrate(rhs, x0, grid, stepper) -> (x_final, nfe)`; returns `nfe=nan` if any
+  state goes non-finite (diverged).
+
+`src/grids.py`: `grid_t(T, t_end, n)` (uniform in t, descending),
+`grid_lambda(T, t_end, n)` (uniform in λ; `np.linspace(lmbda(T), lmbda(t_end), n+1)`).
+
+Tests: each stepper hits its textbook order (1/2/3/4) on Tier-1 at moderate κ
+(slope within ±0.15); `integrate` NFE accounting exact; diverged runs flagged.
+
+### M4 — arm C + Gate G1  (guide steps 5–6)  ← CRITICAL CHECKPOINT
+
+`src/dpm.py` (hand-written, ~4 lines each):
+```
+dpm_solver_1(eps_fn, x, t_prev, t_cur):  h = λ(t_cur) - λ(t_prev)
+    return (alpha(t_cur)/alpha(t_prev)) * x  -  sigma(t_cur) * expm1(h) * eps_fn(x, t_prev)
+ddim_step(eps_fn, x, t_prev, t_cur):     # paper eq 4.1, original form
+    return (a_c/a_p)*x - a_c*(s_p/a_p - s_c/a_c) * eps_fn(x, t_prev)
+```
+Use `np.expm1(h)`, **not** `np.exp(h)-1` (Appendix D.6 — catastrophic for small h,
+which is exactly the regime we measure).
+
+`src/arm_c.py`: wrap the vendored solver. It only calls `model_fn(x, t) -> noise`,
+so an analytic oracle works. Critical settings:
+- `method="singlestep_fixed"` (NOT `singlestep`/`multistep` — those *mix* orders 1/2/3
+  and a convergence slope on them is meaningless, Appendix D.3)
+- `skip_type="logSNR"` (uniform in λ = constant h)
+- `denoise_to_zero=False` (adds an NFE, moves the endpoint)
+- `NoiseScheduleVP('linear', continuous_beta_0=0.1, continuous_beta_1=20.)`, float64
+
+**Gate G1** (`tests/test_gate_g1.py`, end of week 1 — do not build past it):
+1. `dpm_solver_1` ≡ `ddim_step`, marched over a shared λ-grid, **`max|xa-xb| < 1e-14`**
+   (exact algebraic identity, paper §4.1).
+2. `dpm_solver_1` measures as **first order** on Tier-1 (log-log slope in [0.85, 1.15]).
+
+If (1) fails, λ handling is broken — stop and debug. If (2) fails, the error-
+measurement machinery is broken.
+
+### M5 — order fitter + Tier-1 convergence  (guide step 7)
+
+`src/metrics.py`: `fit_order(hs, errs, min_pts=4)` — sliding-window log-log fit that
+returns the straightest window (auto-excludes the pre-asymptotic and round-off
+regions). Report slope + fit window + R² for every solver. `l2(x, ref)`.
+
+Notebook: sweep `n_steps` for every solver in every arm on Tier-1, write rows via
+`runlog.append_row`, produce the order table (solver / theoretical order / measured
+slope / window / R²) and the error-vs-h and error-vs-NFE log-log plots.
+
+### M6 — stability envelope  (guide step 8)  ← most original result
+
+`src/stability.py`: `diverged(x, x_T, factor=10)`; `max_stable_h(tb, arm, stepper,
+...)` — bisect on step count for the coarsest grid that still converges. Sweep
+κ ∈ {1,10,10²,10³,10⁴} × all steppers × arms A,B. Plot `h_max(κ)`. Expected: arm A
+degrades sharply (the `g²/(2σ)` factor blows up as σ→0), arms B/C stay ~flat.
+
+### M7 — Tier-2 mixture  (guide step 9)
+
+Append `MixtureTier2` to `src/testbeds.py`: weighted point cloud, softmax posterior
+weights via `scipy.special.logsumexp` (overflow otherwise at small σ), exact score
+`ε*(x,t) = (x - α x̂₀)/σ`. Reference = `solve_ivp(..., method="DOP853", rtol=1e-13,
+atol=1e-14)` (SciPy rejects rtol < ~2.2e-14; verify convergence by recomputing at
+1e-11). Re-run the M5 convergence machinery under real curvature.
+
+### M8 — crossover  (guide step 11)  ← lead with this
+
+For each testbed and κ: the `h*` where the DPM-Solver-3 error curve crosses the
+DPM-Solver-1 curve. Then check whether `h*` measured on the analytic tiers predicts
+the NFE ≈ 10–12 crossover the paper reports on images (Table 6).
+
+### M9 — Tier 3, Kaggle  (guide step 10)
+
+Notebook built for a Kaggle T4. `UNet2DModel.from_pretrained("google/ddpm-cifar10-32")`
++ `model_wrapper(lambda x,t: unet(x,t).sample, ns, model_type="noise")` (the
+`.sample` matters — it returns a dataclass). `NoiseScheduleVP('discrete',
+betas=sched.betas)`. **Cache the 200-NFE reference trajectory to disk** — recomputing
+it is the biggest time sink. Same checkpoint + same `x_T` for reference and test
+(measuring discretization error, not model error). float32 floors the measurement
+at ~1e-3 relative — report where the curve flattens, don't fit through the flat part.
+Targets: paper Table 4 (discrete DDPM checkpoint), **not** the deck's 4.70.
+
+### M10 — finish  (guide Part 5)
+
+`run_all.sh` reproduces every figure from a clean clone. Report table stating which
+proposal claims were confirmed, which refuted, which dropped. Three-way Tier-3 error
+decomposition (discretization / `t_end` truncation / network approximation).
+
+---
+
+## 8. Gotchas already hit
+
+- Homebrew `python@3.14` is broken on macOS 26 → use `uv` + Python 3.12 (see §3).
+- The vendored solver was committed as a 15-byte `404: Not Found` stub; re-fetched
+  from commit `8acf2bb`. If it looks wrong, re-run the curl in `third_party/README.md`.
+- The vendored file emits a benign `SyntaxWarning: invalid escape sequence '\h'` in a
+  docstring — leave it, the file is unmodified on purpose.
+- Notebooks are committed **with** their output figures (~400 KB each). To commit
+  clean: `jupyter nbconvert --clear-output --inplace notebooks/NN_*.ipynb`.
+- Notebook path bootstrap (works from anywhere in the repo):
+  ```python
+  import sys, pathlib
+  p = pathlib.Path.cwd()
+  while not (p / "pyproject.toml").exists() and p != p.parent: p = p.parent
+  sys.path.insert(0, str(p))
+  ```
+
+---
+
+## 9. Formula quick-reference
+
+Full derivations in `docs/cse402_guide.html` Part 2. Constants: β₀=0.1, β₁=20, T=1.
+
+```
+log α(t) = -(β₁-β₀)/4 t²  - β₀/2 t          σ(t) = sqrt(1 - α²)
+β(t) = β₀ + t(β₁-β₀)     f(t) = -β/2       g²(t) = β(t)
+λ(t) = log α - log σ  (decreasing!)         t(λ): src/schedule.t_of_lmbda
+α̂(λ)=1/√(1+e^{-2λ})   σ̂(λ)=1/√(1+e^{2λ})
+
+PF-ODE in t   (arm A):  dx/dt = f(t) x + g²(t)/(2σ(t)) · ε(x,t)
+PF-ODE in λ   (arm B):  dx/dλ = σ̂(λ)² x  - σ̂(λ) · ε(x, t(λ))          [paper E.1]
+DPM-Solver-1  (arm C):  x_i = (α_i/α_{i-1}) x_{i-1} - σ_i (e^h - 1) ε(x_{i-1}, t_{i-1}),  h = λ_i - λ_{i-1}   [paper 3.7]
+
+Tier 1:  v_j(t) = α² s_j + σ²
+         ε*(x,t)_j = σ(t) x_j / v_j(t)
+         x_j(t) = x_j(T) · sqrt(v_j(t) / v_j(T))          (exact, no integration)
+
+Tier 2:  r_k ∝ w_k exp(-‖x - α μ_k‖² / 2σ²)   (softmax)
+         x̂₀ = Σ_k r_k μ_k ;   ε*(x,t) = (x - α x̂₀)/σ
+```
