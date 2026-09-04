@@ -104,7 +104,7 @@ src/               pure-python engine — NO gpu, NO plotting. Unit-tested.
   schedule.py      VP-linear noise schedule; λ ↔ t          [M1 ✅]
   testbeds.py      pf_rhs_t / pf_rhs_lambda + GaussianTier1  [M2 ✅]  (MixtureTier2 → M7)
   runlog.py        THE results-CSV schema (see §5)           [M0 ✅]
-  solvers.py       arm A steppers + integrate()              [M3]
+  solvers.py       arm A steppers (RK1-4 + AB2) + integrate() [M3]
   grids.py         grid_t vs grid_lambda                     [M3]
   dpm.py           arm C: DPM-Solver-1 + DDIM, hand-written  [M4]
   arm_c.py         wrapper around third_party/ for DPM-2/3   [M4]
@@ -131,8 +131,9 @@ docs/              the guide, the deck, the paper, the chat log, the rules.
   Every experiment appends rows in this exact shape so tables concatenate.
 - **λ is strictly DECREASING in t.** `t=1` → most negative λ; `t→0` → λ→+∞.
   Getting this backwards is the single most common bug in this project.
-- **NFE ≠ step count.** RK4 = 4 network calls / step; DPM-Solver-k = k / step.
-  Every cross-arm plot uses measured **NFE**. Use `h` only *within* an arm, for order fits.
+- **NFE ≠ step count.** RK4 = 4 network calls / step; DPM-Solver-k = k / step;
+  AB2 = 1 / step (+1 startup). Every cross-arm plot uses measured **NFE**. Use `h`
+  only *within* an arm, for order fits.
 - **Order is defined in `h`, not NFE.** Fit and report both slopes.
 - Arm C `singlestep_fixed` real NFE is `(steps // order) * order` — record the real number.
 
@@ -145,7 +146,7 @@ docs/              the guide, the deck, the paper, the chat log, the rules.
 | M0 | Scaffold, results schema, test wiring, fix vendored solver (was a 404 stub) | ✅ | `src/runlog.py`, `pyproject.toml`, `requirements.txt`, `.gitignore` |
 | M1 | VP-linear noise schedule, λ ↔ t | ✅ | `src/schedule.py`, `tests/test_schedule.py` (7), `notebooks/01_schedule.ipynb` |
 | M2 | Tier-1 Gaussian testbed: exact score + exact trajectory + ODE-consistency gate | ✅ | `src/testbeds.py`, `tests/test_tier1.py` (9), `notebooks/02_tier1_testbed.ipynb` |
-| **M3** | **arm A steppers + arm B grids** | ⬜ **next** | |
+| **M3** | **arm A solvers (Euler, RK2, RK3, RK4, AB2) + arm B grids** | ⬜ **next** | |
 | M4 | arm C (DPM-Solver-1 + authors' code) + **Gate G1** | ⬜ | |
 | M5 | order fitter + Tier-1 convergence experiment (first results/figures) | ⬜ | |
 | M6 | stability envelope, κ sweep | ⬜ | |
@@ -168,21 +169,34 @@ arms A/B and arm C provably share one schedule).
 Each milestone = `src/` module(s) + `tests/test_*.py` + `notebooks/NN_*.ipynb` that
 ends with an inline pytest cell. Follow the guide step in parentheses.
 
-### M3 — arm A solvers + arm B grids  (guide steps 3–4)
+### M3 — arm A solvers (incl. AB2) + arm B grids  (guide steps 3–4)
 
 `src/solvers.py`:
-- `euler, midpoint, heun3, rk4` — **exactly the paper's Appendix E.4 schemes**:
-  explicit **midpoint** for RK2; **Heun's 3rd-order with r₁=1/3, r₂=2/3** for RK3
-  (this mirrors DPM-Solver-3 — generic Heun/RK4 would break comparability with Table 1).
-- `NFE_PER_STEP = {euler:1, midpoint:2, heun3:3, rk4:4}`, `STEPPERS = {...}`.
-- `integrate(rhs, x0, grid, stepper) -> (x_final, nfe)`; returns `nfe=nan` if any
-  state goes non-finite (diverged).
+- **One-step explicit RK** — `euler, midpoint, heun3, rk4`, **exactly the paper's
+  Appendix E.4 schemes**: explicit **midpoint** for RK2; **Heun's 3rd-order with
+  r₁=1/3, r₂=2/3** for RK3 (mirrors DPM-Solver-3 — generic Heun/RK4 would break
+  comparability with Table 1). Signature `stepper(rhs, x, a, b) -> x_next`.
+- **`ab2` — Adams–Bashforth 2, linear multistep** (restores the deck's multistep
+  row; RK45/adaptive from the deck is **cut** — step size isn't a free variable, so
+  "order vs h" and "max stable h" aren't defined on it; mention it only as a
+  reference curve if wanted). Order 2, **1 NFE/step after startup**. Recurrence
+  `x_{n+1} = x_n + h(3/2 f_n − 1/2 f_{n-1})` with `f_k = rhs(x_k, node_k)` cached
+  and reused. **Startup:** one explicit-midpoint (RK2) step for `x_1` (O(h³) local,
+  so it can't contaminate the order-2 slope). Total NFE for N steps = `N + 1`.
+  Because it's multistep, `ab2` does not fit the one-step signature — `integrate`
+  handles it as a special branch, not via `STEPPERS`.
+- `NFE_PER_STEP = {euler:1, midpoint:2, heun3:3, rk4:4, ab2:1}` (reference/sanity
+  only — see below), `STEPPERS = {euler, midpoint, heun3, rk4}`.
+- `integrate(rhs, x0, grid, stepper) -> (x_final, nfe)`: wrap `rhs` in a call
+  counter and return the **measured** NFE (so AB2's `+1` and any partial count on
+  divergence are automatic); `nfe = nan` and stop if any state goes non-finite.
 
 `src/grids.py`: `grid_t(T, t_end, n)` (uniform in t, descending),
 `grid_lambda(T, t_end, n)` (uniform in λ; `np.linspace(lmbda(T), lmbda(t_end), n+1)`).
 
-Tests: each stepper hits its textbook order (1/2/3/4) on Tier-1 at moderate κ
-(slope within ±0.15); `integrate` NFE accounting exact; diverged runs flagged.
+Tests: each solver hits its textbook order on Tier-1 at moderate κ — euler 1,
+midpoint 2, heun3 3, rk4 4, **ab2 2** (slope within ±0.15); measured NFE equals
+`N+1` for ab2 and `NFE_PER_STEP[s]·N` for the RK steppers; diverged runs flagged.
 
 ### M4 — arm C + Gate G1  (guide steps 5–6)  ← CRITICAL CHECKPOINT
 
@@ -254,11 +268,32 @@ it is the biggest time sink. Same checkpoint + same `x_T` for reference and test
 at ~1e-3 relative — report where the curve flattens, don't fit through the flat part.
 Targets: paper Table 4 (discrete DDPM checkpoint), **not** the deck's 4.70.
 
+**FID — open scope decision.** L2-to-reference is the primary Tier-3 read-out and is
+non-negotiable. FID-5k vs NFE (the deck's "recover baseline sample quality" claim) is
+*in scope only if week 3 has room*; Gate G2 fallback is "ship Tier 3 as L2 only".
+Decide explicitly with the team before M9 rather than letting it drift.
+
 ### M10 — finish  (guide Part 5)
 
-`run_all.sh` reproduces every figure from a clean clone. Report table stating which
-proposal claims were confirmed, which refuted, which dropped. Three-way Tier-3 error
+`run_all.sh` reproduces every figure from a clean clone. Three-way Tier-3 error
 decomposition (discretization / `t_end` truncation / network approximation).
+
+**Proposal-coverage table** (a required deliverable — the honest ledger vs
+`CSE402_Proposal_Deck_v3.pdf`). Known going in:
+
+- *Delivered as promised:* the thesis, measured orders vs ground truth, the stiff-
+  boundary stability map, the efficiency frontier, Sections 01–02, Tier-1 κ-sweep,
+  Tier-3 under neural error.
+- *Substituted (with justification):* efficiency frontier in **NFE** not wall-clock
+  (paper Table 7); Tier-1 **κ-sweep at fixed d** not the d = 2…100 sweep (linear case
+  decouples — optionally show one small d-sweep to demonstrate this empirically);
+  Tier-2 **point/Gaussian mixture** not Swiss roll (Swiss roll has no closed-form
+  score — a deck error); DOP853 rtol 1e-13 not 1e-14 (SciPy floor).
+- *Dropped:* **RK45 / adaptive** solver (step size not a free variable);
+  reimplementing DPM-Solver (use the authors' code + analytic oracle instead).
+- *Conditional:* Tier-3 **FID** (see M9).
+- *Added beyond the deck:* arm B, Gate G1, the crossover study (M8), the Tier-3
+  three-way error decomposition.
 
 ---
 
