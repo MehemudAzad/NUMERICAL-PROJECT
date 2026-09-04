@@ -1,0 +1,24 @@
+# Core stack for the local analytic suite (Tiers 1 & 2) and the test suite.
+# Tiers 1 & 2 are CPU-only NumPy — they run fine on a laptop with no GPU.
+#
+# Install (this Mac's Homebrew python@3.14 is broken on macOS 26, so use uv):
+#   uv venv --python 3.12 .venv && source .venv/bin/activate
+#   uv pip install -r requirements.txt
+# or on a normal machine:
+#   python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+numpy==2.5.2
+scipy==1.18.1
+matplotlib==3.11.1
+pandas==3.0.5
+pytest==9.1.1
+torch==2.14.0          # needed by third_party/dpm_solver_pytorch.py (arm C), CPU is fine for Tiers 1-2
+
+# Notebook execution
+jupyterlab
+ipykernel
+
+# --- Tier 3 only (run on Kaggle T4, not locally) ---
+# diffusers
+# pytorch-fid
+# accelerate

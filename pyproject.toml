@@ -1,0 +1,11 @@
+[project]
+name = "cse402-solvers"
+version = "0.1.0"
+description = "Order, cost and stability of probability-flow ODE solvers for diffusion sampling (CSE-402 course project)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+# Let tests do `from src.schedule import ...` when pytest is run from the repo root.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
