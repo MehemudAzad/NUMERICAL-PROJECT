@@ -104,10 +104,10 @@ src/               pure-python engine — NO gpu, NO plotting. Unit-tested.
   schedule.py      VP-linear noise schedule; λ ↔ t          [M1 ✅]
   testbeds.py      pf_rhs_t / pf_rhs_lambda + GaussianTier1  [M2 ✅]  (MixtureTier2 → M7)
   runlog.py        THE results-CSV schema (see §5)           [M0 ✅]
-  solvers.py       arm A steppers (RK1-4 + AB2) + integrate() [M3]
-  grids.py         grid_t vs grid_lambda                     [M3]
-  dpm.py           arm C: DPM-Solver-1 + DDIM, hand-written  [M4]
-  arm_c.py         wrapper around third_party/ for DPM-2/3   [M4]
+  solvers.py       arm A steppers (RK1-4 + AB2) + integrate() [M3 ✅]
+  grids.py         grid_t vs grid_lambda                     [M3 ✅]
+  dpm.py           arm C: DPM-Solver-1 + DDIM, hand-written  [M4 ✅]
+  arm_c.py         wrapper around third_party/ for DPM-2/3   [M4 ✅]
   metrics.py       sliding-window log-log order fitter       [M5]
   stability.py     bisection for max stable h                [M6]
 tests/             pytest; runs in seconds on the laptop. Gate G1 lives here.
@@ -146,21 +146,37 @@ docs/              the guide, the deck, the paper, the chat log, the rules.
 | M0 | Scaffold, results schema, test wiring, fix vendored solver (was a 404 stub) | ✅ | `src/runlog.py`, `pyproject.toml`, `requirements.txt`, `.gitignore` |
 | M1 | VP-linear noise schedule, λ ↔ t | ✅ | `src/schedule.py`, `tests/test_schedule.py` (7), `notebooks/01_schedule.ipynb` |
 | M2 | Tier-1 Gaussian testbed: exact score + exact trajectory + ODE-consistency gate | ✅ | `src/testbeds.py`, `tests/test_tier1.py` (9), `notebooks/02_tier1_testbed.ipynb` |
-| **M3** | **arm A solvers (Euler, RK2, RK3, RK4, AB2) + arm B grids** | ⬜ **next** | |
-| M4 | arm C (DPM-Solver-1 + authors' code) + **Gate G1** | ⬜ | |
-| M5 | order fitter + Tier-1 convergence experiment (first results/figures) | ⬜ | |
+| M3 | arm A solvers (Euler, RK2, RK3, RK4, AB2) + arm B grids | ✅ | `src/solvers.py`, `src/grids.py`, `tests/test_solvers.py` (14), `notebooks/03_solvers.ipynb` |
+| M4 | arm C (DPM-Solver-1 + authors' code) + **Gate G1** | ✅ | `src/dpm.py`, `src/arm_c.py`, `tests/test_gate_g1.py` (2), `tests/test_arm_c.py` (5), `notebooks/04_arm_c.ipynb` |
+| **M5** | **order fitter + Tier-1 convergence experiment (first results/figures)** | ⬜ **next** | |
 | M6 | stability envelope, κ sweep | ⬜ | |
 | M7 | Tier-2 mixture testbed + DOP853 reference + order under curvature | ⬜ | |
 | M8 | crossover study (h* where order-3 overtakes order-1) — headline | ⬜ | |
 | M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ | |
 | M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ⬜ | |
 
-`python -m pytest` → **19 passed** as of commit `27dd657`.
+`python -m pytest` → **40 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4).
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
 `schedule.py` agrees with the vendored `NoiseScheduleVP('linear')` to 1e-11 (so
-arms A/B and arm C provably share one schedule).
+arms A/B and arm C provably share one schedule). All arm-A/B steppers (euler,
+midpoint, heun3, rk4, ab2) hit their textbook order on Tier 1 to within ±0.15;
+measured NFE matches `NFE_PER_STEP[s]*N` (`N+1` for ab2) exactly, not just
+approximately. **Gate G1 passes**: `dpm_solver_1` ≡ `ddim_step` to
+`5.5e-16` (bar was `1e-14`); `dpm_solver_1` measures at order `0.99`. The
+`arm_c.py` wrapper (authors' code, `algorithm_type="dpmsolver"`) reproduces
+`dpm_solver_1` to `9e-16` and measures orders 1/2/3 at `0.99/2.05/3.15`.
+
+**Gotcha found in `third_party/dpm_solver_pytorch.py`:** for `schedule='linear'`,
+`NoiseScheduleVP(..., dtype=...)` is silently ignored — `get_time_steps()` builds
+its own `torch.tensor`/`torch.linspace` using torch's *ambient* default dtype
+(float32), which floors the wrapper's precision at ~1e-7 regardless of the
+`dtype` argument. `src/arm_c.py` fixes this the only way that doesn't touch the
+vendored file: `torch.set_default_dtype(torch.float64)` as a module-level
+side effect. Harmless project-wide (nothing else here uses torch), but if a
+future milestone imports `third_party` directly without going through
+`src/arm_c.py`, it will silently get float32 timesteps again.
 
 ---
 
@@ -304,6 +320,11 @@ decomposition (discretization / `t_end` truncation / network approximation).
   from commit `8acf2bb`. If it looks wrong, re-run the curl in `third_party/README.md`.
 - The vendored file emits a benign `SyntaxWarning: invalid escape sequence '\h'` in a
   docstring — leave it, the file is unmodified on purpose.
+- `NoiseScheduleVP(..., dtype=...)` doesn't reach the `'linear'` schedule path —
+  `get_time_steps()` builds its own float32 tensors regardless. `src/arm_c.py`
+  sets `torch.set_default_dtype(torch.float64)` globally to fix it (see §6, M4).
+  Anything that imports `third_party` directly, bypassing `src/arm_c.py`, loses
+  this fix and silently gets ~1e-7-floored timesteps.
 - Notebooks are committed **with** their output figures (~400 KB each). To commit
   clean: `jupyter nbconvert --clear-output --inplace notebooks/NN_*.ipynb`.
 - Notebook path bootstrap (works from anywhere in the repo):

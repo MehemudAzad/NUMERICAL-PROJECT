@@ -72,9 +72,9 @@ python -m pytest
 | M0 | Scaffold: layout, vendored solver, results schema, tests wired | ✅ done |
 | M1 | `src/schedule.py` — noise schedule (VP linear), λ ↔ t | ✅ done |
 | M2 | `src/testbeds.py` — Tier-1 Gaussian + exact-solution test | ✅ done |
-| M3 | `src/solvers.py` (arm A) + `src/grids.py` (arm B) | ⬜ next |
-| M4 | `src/dpm.py` (arm C) + authors'-code wrapper + **Gate G1** | ⬜ |
-| M5 | `src/metrics.py` order fitter + Tier-1 convergence experiment | ⬜ |
+| M3 | `src/solvers.py` (arm A) + `src/grids.py` (arm B) | ✅ done |
+| M4 | `src/dpm.py` (arm C) + authors'-code wrapper + **Gate G1** | ✅ done |
+| M5 | `src/metrics.py` order fitter + Tier-1 convergence experiment | ⬜ next |
 | M6 | `src/stability.py` + κ-sweep stability envelope | ⬜ |
 | M7 | Tier-2 mixture testbed + reference + order under curvature | ⬜ |
 | M8 | Crossover study (h\* where order-3 overtakes order-1) | ⬜ |
