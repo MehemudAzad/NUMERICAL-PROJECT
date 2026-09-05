@@ -148,14 +148,15 @@ docs/              the guide, the deck, the paper, the chat log, the rules.
 | M2 | Tier-1 Gaussian testbed: exact score + exact trajectory + ODE-consistency gate | ✅ | `src/testbeds.py`, `tests/test_tier1.py` (9), `notebooks/02_tier1_testbed.ipynb` |
 | M3 | arm A solvers (Euler, RK2, RK3, RK4, AB2) + arm B grids | ✅ | `src/solvers.py`, `src/grids.py`, `tests/test_solvers.py` (14), `notebooks/03_solvers.ipynb` |
 | M4 | arm C (DPM-Solver-1 + authors' code) + **Gate G1** | ✅ | `src/dpm.py`, `src/arm_c.py`, `tests/test_gate_g1.py` (2), `tests/test_arm_c.py` (5), `notebooks/04_arm_c.ipynb` |
-| **M5** | **order fitter + Tier-1 convergence experiment (first results/figures)** | ⬜ **next** | |
-| M6 | stability envelope, κ sweep | ⬜ | |
-| M7 | Tier-2 mixture testbed + DOP853 reference + order under curvature | ⬜ | |
+| M5 | order fitter + Tier-1 convergence experiment (first results/figures) | ✅ | `src/metrics.py`, `tests/test_metrics.py` (5), `notebooks/05_convergence.ipynb`, `results/tier1_order.csv`, `figures/05_error_vs_h.png`, `figures/05_error_vs_nfe.png` |
+| M6 | stability envelope, κ sweep | ✅ | `src/stability.py`, `tests/test_stability.py` (6), `notebooks/06_stability.ipynb`, `results/stability_envelope.csv`, `figures/06_stability_envelope.png` |
+| **M7** | **Tier-2 mixture testbed + DOP853 reference + order under curvature** | ⬜ **next** | |
 | M8 | crossover study (h* where order-3 overtakes order-1) — headline | ⬜ | |
 | M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ | |
 | M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ⬜ | |
 
-`python -m pytest` → **40 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4).
+`python -m pytest` → **51 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
++5 M5, +6 M6).
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
@@ -167,6 +168,54 @@ approximately. **Gate G1 passes**: `dpm_solver_1` ≡ `ddim_step` to
 `5.5e-16` (bar was `1e-14`); `dpm_solver_1` measures at order `0.99`. The
 `arm_c.py` wrapper (authors' code, `algorithm_type="dpmsolver"`) reproduces
 `dpm_solver_1` to `9e-16` and measures orders 1/2/3 at `0.99/2.05/3.15`.
+
+**M5 order table** (`notebooks/05_convergence.ipynb`, κ=10, `results/tier1_order.csv`):
+every solver in every arm hits its theoretical order to within ±0.1, R² > 0.9997
+across the board — arm A/B euler/midpoint/heun3/rk4/ab2 at
+1.01/2.03/3.01/3.94/2.03 (A) and 1.02/2.06/3.01/3.92/1.94 (B), arm C
+ddim/dpm1/dpm2/dpm3 at 0.99/0.99/2.03/3.09. `fit_order`'s sliding window
+correctly excludes the round-off tail without being told where it is (verified
+in `tests/test_metrics.py` against both a clean power law and a synthetic curve
+with a noisy round-off floor).
+
+**Sweep ranges are per-solver, not shared** — a uniform `n ∈ [8..256]` sweep
+was tried first and measurably biased two entries: `rk4` (pre-asymptotic
+contamination at `n=8` alone dragged arm A's slope down to 3.84) and, more
+sharply, **`ab2` on arm B**, which has a real, reproducible non-monotonic bump
+in its error curve around `n≈16–32` (error rises before resuming its order-2
+decay — shown directly in the notebook's §2b with a fine `n` sweep, and
+independently checked outside the notebook, not an artifact of the fit).
+`fit_order`'s window search couldn't fully see past this with only 6 candidate
+points and its fixed `+0.01/point` width bonus preferring the wider, biased
+window over a narrower, cleaner one (measured 1.75 vs. a true ~1.94) — fixed by
+starting each solver's sweep past its own pre-asymptotic region (`ab2` at
+`n=64`, others at `n=16`), not by post-hoc filtering. Worth remembering for M7:
+`fit_order` is not immune to a badly-chosen sweep range, and a non-monotonic
+bump like ab2's arm-B one won't announce itself unless checked at finer
+resolution.
+
+**M6 finding — arm A does not destabilize on Tier 1, contrary to the spec's
+expectation.** `max_stable_h` (guide's exact bisection) was swept over
+κ ∈ {1, 10, 10², 10³, 10⁴} × all five arm-A/B steppers, and separately
+stress-tested to κ up to 1e8 and `t_end` down to 1e-6
+(`notebooks/06_stability.ipynb`): **`h_max` is exactly flat** — arm A always
+reports the coarsest grid tried (`n_lo=2`, `h≈0.5`) as already stable, for every
+κ and every stepper. This is not a bug (bisection logic is verified separately
+against a synthetic linear ODE with a closed-form instability threshold, in
+`tests/test_stability.py`); it's structural to the VP-linear schedule: the
+uniform-t grid's node nearest `t_end` sits at `t_end + h`, and the exact
+stability product `h · J(t_end + h)` (`J` = local Jacobian of the linear PF-ODE)
+never exceeds ≈0.9 for any `h` or κ — well under explicit Euler's threshold of
+2 — because `σ(t)² ~ β₀t` near the boundary makes the local stiffness and the
+grid's shrinking distance to `t_end` roughly self-cancelling. **This narrows,
+not confirms, paper §4.2's instability claim**: it doesn't show up on Tier 1's
+linear, decoupled problem under this metric. Real instability (if any) is now
+an open question for Tier 2 (M7, curved score) or Tier 3 (M9, real network),
+where this cancellation has no reason to hold — worth deciding explicitly as a
+team before M7/M9, since it changes what M6's figure can claim in the report
+(the flat stability map is still worth showing, but the "arm A degrades
+sharply" framing in the M6 spec above should not be used until/unless a later
+tier reproduces it).
 
 **Gotcha found in `third_party/dpm_solver_pytorch.py`:** for `schedule='linear'`,
 `NoiseScheduleVP(..., dtype=...)` is silently ignored — `get_time_steps()` builds

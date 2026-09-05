@@ -74,9 +74,9 @@ python -m pytest
 | M2 | `src/testbeds.py` — Tier-1 Gaussian + exact-solution test | ✅ done |
 | M3 | `src/solvers.py` (arm A) + `src/grids.py` (arm B) | ✅ done |
 | M4 | `src/dpm.py` (arm C) + authors'-code wrapper + **Gate G1** | ✅ done |
-| M5 | `src/metrics.py` order fitter + Tier-1 convergence experiment | ⬜ next |
-| M6 | `src/stability.py` + κ-sweep stability envelope | ⬜ |
-| M7 | Tier-2 mixture testbed + reference + order under curvature | ⬜ |
+| M5 | `src/metrics.py` order fitter + Tier-1 convergence experiment | ✅ done |
+| M6 | `src/stability.py` + κ-sweep stability envelope | ✅ done |
+| M7 | Tier-2 mixture testbed + reference + order under curvature | ⬜ next |
 | M8 | Crossover study (h\* where order-3 overtakes order-1) | ⬜ |
 | M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ |
 | M10 | Final figures, `run_all`, report tables | ⬜ |
