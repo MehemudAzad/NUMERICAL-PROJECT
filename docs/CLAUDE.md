@@ -150,13 +150,13 @@ docs/              the guide, the deck, the paper, the chat log, the rules.
 | M4 | arm C (DPM-Solver-1 + authors' code) + **Gate G1** | ✅ | `src/dpm.py`, `src/arm_c.py`, `tests/test_gate_g1.py` (2), `tests/test_arm_c.py` (5), `notebooks/04_arm_c.ipynb` |
 | M5 | order fitter + Tier-1 convergence experiment (first results/figures) | ✅ | `src/metrics.py`, `tests/test_metrics.py` (5), `notebooks/05_convergence.ipynb`, `results/tier1_order.csv`, `figures/05_error_vs_h.png`, `figures/05_error_vs_nfe.png` |
 | M6 | stability envelope, κ sweep | ✅ | `src/stability.py`, `tests/test_stability.py` (6), `notebooks/06_stability.ipynb`, `results/stability_envelope.csv`, `figures/06_stability_envelope.png` |
-| **M7** | **Tier-2 mixture testbed + DOP853 reference + order under curvature** | ⬜ **next** | |
-| M8 | crossover study (h* where order-3 overtakes order-1) — headline | ⬜ | |
-| M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ | |
+| M7 | Tier-2 mixture testbed + DOP853 reference + order under curvature | ✅ | `MixtureTier2`/`swiss_roll`/`dop853_reference` in `src/testbeds.py`, `tests/test_tier2.py` (13), `notebooks/07_tier2.ipynb`, `results/tier2_order.csv`, `figures/07_error_vs_h.png`, `figures/07_error_vs_nfe.png` |
+| **M8** | **crossover study (h\* where order-3 overtakes order-1) — headline** | ✅ | `src/crossover.py`, `tests/test_crossover.py` (7), `notebooks/08_crossover.ipynb`, `results/crossover_sweep.csv`, `figures/08_crossover.png` |
+| M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ **next** | |
 | M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ⬜ | |
 
-`python -m pytest` → **51 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
-+5 M5, +6 M6).
+`python -m pytest` → **71 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
++5 M5, +6 M6, +13 M7, +7 M8).
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
@@ -216,6 +216,50 @@ team before M7/M9, since it changes what M6's figure can claim in the report
 (the flat stability map is still worth showing, but the "arm A degrades
 sharply" framing in the M6 spec above should not be used until/unless a later
 tier reproduces it).
+
+**M7 finding — every solver keeps its textbook order under real curvature.**
+`MixtureTier2` (`mog8`: 8 modes on a Swiss-roll curve, `swiss_roll(n=8,
+noise=0.0)`) makes the PF-ODE right-hand side genuinely nonlinear in `x` (the
+posterior mean is a softmax over 8 modes, not a fixed linear shrinkage like
+Tier 1's), with no algebraic reference — `dop853_reference` (SciPy DOP853,
+`rtol=1e-13`) stands in, checked converged against a tighter `rtol=1e-11`
+(agreement `6.9e-13`, far below every measured error). Re-running M5's exact
+sweep design on this testbed (`notebooks/07_tier2.ipynb`): worst
+`|measured − theoretical|` across all 14 (arm, solver) pairs is **0.084**,
+mean R² **0.99996** — as clean as Tier 1's linear numbers, and the max slope
+shift from Tier 1's kappa=10 table is only **0.059**. One deliberate
+deviation from M6: `T_END=0.2`, not `1e-3` — pushing to the stiff boundary
+*combined with* real curvature left every solver's sweep still pre-asymptotic
+at the M5 `n_steps` ranges (measured slopes off by up to 1.2), so this
+experiment isolates curvature alone, the same way M5 isolated stiffness alone
+at a moderate `t_end`. Net read: the order theorem's smoothness hypothesis
+(paper Assumption B.1) holds on this curved-but-exact-score testbed, same as
+the linear one — no order loss from curvature by itself.
+
+**M8 finding — the crossover is real, flat across kappa, and moved toward
+the paper's number by curvature, but doesn't reach it.** `src/crossover.py`
+(`crossover_h`) finds every sign change of `log(err_dpm3) − log(err_dpm1)`
+between the two curves swept at *matched h* (a shared macro-step-count list,
+so both orders share the same `h`; NFE differs 3x, per `singlestep_fixed`'s
+cost). At `T_END=1e-3` (the paper's own `ε=1e-3`), Tier 1 crosses at
+`nfe3_star` in **4.4–5.0** across all five swept kappa (1 → 1e4) — essentially
+flat, echoing M6's kappa-independence finding for stability. Tier 2 (`mog8`)
+crosses later, at `nfe3_star ≈ 8.9` — closer to the paper's observed ~10–12
+NFE (Table 6), but still short of it. Read together with M7: **stiffness
+alone doesn't move the crossover toward the paper's number; curvature does,
+partway.** Both analytic tiers still have an *exact* score (zero model
+error), so the honest conclusion is that the remaining gap is a reasonable
+place to lay the blame on the real network's approximation error and much
+higher intrinsic dimensionality (d=3072 vs d=2–3 here) — this narrows, not
+confirms, Table 6's finding, the same shape of result M6 reported for
+stability. `notebooks/08_crossover.ipynb` §5 reproduces the guide's own
+illustrative sketch with real data (order-3 visibly worse than order-1 left
+of the dashed `h*` line, on both Tier 1 kappa=10 and `mog8`). One thing worth
+remembering if M9/M10 revisit this: DPM-Solver-3's error is genuinely
+non-monotonic at the coarsest grids tested (a real dip-then-rise, not noise —
+visible directly in `figures/08_crossover.png`), which is exactly why
+`crossover_h` reports *every* sign change rather than assuming a single
+crossing; in every group actually swept here there was only one anyway.
 
 **Gotcha found in `third_party/dpm_solver_pytorch.py`:** for `schedule='linear'`,
 `NoiseScheduleVP(..., dtype=...)` is silently ignored — `get_time_steps()` builds
