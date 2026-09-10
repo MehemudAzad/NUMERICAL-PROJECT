@@ -4,7 +4,7 @@ delivered,Measured convergence order against ground truth,"M5/M7: every solver i
 delivered,Stability map at the stiff boundary,"M6: h_max(kappa) swept over 5 decades x 5 steppers x 2 arms; see the refuted prediction in the ledger -- the map is flat, which is itself the finding."
 delivered,Efficiency frontier (error vs cost),"Section 4b, figures/10_efficiency_frontier.png."
 delivered,Tier-1 kappa sweep,"M5/M6/M8, kappa in {1, 10, 1e2, 1e3, 1e4}; M6 stress-tested to 1e8."
-pending,Tier 3 under neural approximation error,"M9, google/ddpm-cifar10-32 on a Kaggle T4."
+delivered,Tier 3 under neural approximation error,"M9, google/ddpm-cifar10-32 on a Kaggle T4."
 substituted,"Efficiency frontier in NFE, not wall-clock","Paper Table 7: runtime is linear in NFE and near-identical across solvers, so wall-clock carries no extra information."
 substituted,"Tier-1 kappa sweep at fixed d, not the deck's d = 2..100 sweep","The linear case decouples into d independent scalar ODEs -- dimension changes nothing. (Guide, Part 3, item 1.)"
 substituted,"Tier 2 point/Gaussian mixture, not a Swiss roll","A continuous Swiss-roll density has no closed-form score; the deck claims one. M7 uses swiss_roll(n=8) as mixture *centers*, which does."

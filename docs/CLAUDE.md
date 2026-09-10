@@ -155,13 +155,12 @@ run_all.sh         clean-clone reproduction: tests + notebooks 01-08, 10  [M10]
 | M6 | stability envelope, κ sweep | ✅ | `src/stability.py`, `tests/test_stability.py` (6), `notebooks/06_stability.ipynb`, `results/stability_envelope.csv`, `figures/06_stability_envelope.png` |
 | M7 | Tier-2 mixture testbed + DOP853 reference + order under curvature | ✅ | `MixtureTier2`/`swiss_roll`/`dop853_reference` in `src/testbeds.py`, `tests/test_tier2.py` (13), `notebooks/07_tier2.ipynb`, `results/tier2_order.csv`, `figures/07_error_vs_h.png`, `figures/07_error_vs_nfe.png` |
 | **M8** | **crossover study (h\* where order-3 overtakes order-1) — headline** | ✅ | `src/crossover.py`, `tests/test_crossover.py` (7), `notebooks/08_crossover.ipynb`, `results/crossover_sweep.csv`, `figures/08_crossover.png` |
-| M9 | Tier-3 CIFAR-10 Kaggle notebook | ✅ | `src/tier3.py`, `tests/test_tier3.py` (18), `notebooks/09_tier3_cifar10.ipynb`; **owner must run it on Kaggle** to produce `results/tier3_error.csv`, `results/tier3_decomposition.csv`, `figures/09_*.png` |
+| M9 | Tier-3 CIFAR-10 Kaggle notebook | ✅ | `src/tier3.py`, `tests/test_tier3.py` (18), `notebooks/09_tier3_cifar10.ipynb` (committed **with** its Kaggle outputs), `results/tier3_error.csv` (72 rows), `results/tier3_decomposition.csv`, `figures/09_*.png` |
 | M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ✅ | `notebooks/10_report.ipynb`, `run_all.sh`, `tests/test_report.py` (19), `results/master_order_table.csv`, `results/crossover_summary.csv`, `results/predictions_ledger.csv`, `results/proposal_coverage.csv`, `figures/10_*.png` |
 
-`python -m pytest` → **105 passed, 3 skipped** (108 collected; was 19 as of commit `27dd657`;
-+14 M3, +7 M4, +5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10). The 3 skips are
-Tier-3 checks that need `results/tier3_error.csv`; they turn green once the
-Kaggle run's CSVs are committed.
+`python -m pytest` → **108 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
++5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10). All green now that the Kaggle run's
+CSVs are committed — the Tier-3 checks that used to skip are live.
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
@@ -266,14 +265,65 @@ visible directly in `figures/08_crossover.png`), which is exactly why
 `crossover_h` reports *every* sign change rather than assuming a single
 crossing; in every group actually swept here there was only one anyway.
 
-**M9 — Tier 3 is built and validated, but the numbers are the owner's to
-produce.** `src/tier3.py` + `notebooks/09_tier3_cifar10.ipynb` are complete and
-smoke-tested end to end (stub UNet, CPU); `results/tier3_*.csv` appear only after
-the notebook is run on a Kaggle T4. The design decision that mattered: **the
+**M9 — Assumption B.1 fails on a real network, and that is the finding.**
+Run on a Kaggle T4, 64 samples, `google/ddpm-cifar10-32`, 3005 network calls in
+9.4 minutes plus 1104 for the five cached references. Every solver in every arm
+**loses order** against a real score:
+
+| arm/solver | theory | Tier 1 | Tier 2 | **Tier 3** |
+|---|---|---|---|---|
+| A/euler | 1 | 1.01 | 1.01 | **0.84** |
+| A/midpoint | 2 | 2.03 | 2.03 | **1.53** |
+| A/rk4 | 4 | 3.94 | 4.00 | **1.21** |
+| B/euler | 1 | 1.02 | 1.02 | **0.75** |
+| B/midpoint | 2 | 2.06 | 2.05 | **1.60** |
+| B/rk4 | 4 | 3.92 | 3.97 | **2.23** |
+| C/dpm1 | 1 | 0.99 | 1.00 | **0.81** |
+| C/dpm2 | 2 | 2.03 | 2.02 | **2.19** |
+| C/dpm3 | 3 | 3.09 | 3.08 | **2.47** |
+
+Worst `|measured − theory|` goes **0.094 (T1) → 0.084 (T2) → 2.790 (T3)**, a 33x
+degradation, with 8 of 9 fits more than 0.15 below theory. This is the project's
+sharpest result: Tiers 1–2 satisfy the paper's Assumption B.1 *exactly* (analytic
+score, derivatives continuous to order k+1) and hit theory; the network does not
+satisfy it and the order theorem's conclusion goes with it. **The higher the
+claimed order, the more is lost** — rk4 sheds 2.8 while euler sheds 0.16 — which
+is what an unsatisfied smoothness hypothesis predicts, since higher-order schemes
+lean on higher derivatives.
+
+Two more Tier-3 findings worth the report:
+
+- **Arm A vs arm B finally separates.** On the analytic tiers the two arms were
+  nearly indistinguishable in slope. On a real network arm A/rk4 measures 1.21 and
+  bottoms out at `err = 4.57`, while arm B/rk4 measures 2.23 and reaches `0.43` —
+  **10x better** at the same budget. The λ-reparameterisation, which bought almost
+  nothing on the exact-score tiers, is worth an order of magnitude here. That is
+  the A-vs-B comparison the three-arm design was built to make.
+- **The thesis sentence holds only on Tier 3.** "RK4 wins per step, loses per NFE
+  to DPM-Solver-3" is *refuted* on Tiers 1–2 (rk4 wins on both axes there) and
+  *holds* on Tier 3 for **NFE 16–120**. The analytic sweeps start past each
+  solver's pre-asymptotic region and so sit deep in the regime where rk4's `h⁴`
+  dominates; the paper's claim is about practitioner budgets. Report the band, not
+  the bare claim.
+
+**Error decomposition** (`results/tier3_decomposition.csv`): floor
+`‖ref_300 − ref_201‖ = 3.68e-1` (4.6e-2 per sample, ~8e-4 relative against
+`‖x‖ ≈ √3072` — the guide's predicted ~1e-3 float32 floor, measured); `t_end`
+truncation 1.53 / 5.43 / 11.56 for `t_end` = 2e-3 / 5e-3 / 1e-2 vs 1e-3;
+discretization (dpm3) 279.6 at 9 NFE falling to 0.373 at 120 NFE. **Every budget
+tested is still discretization-limited** — dpm3 only reaches the floor at the very
+last point — so this checkpoint at 64 samples never enters the regime where more
+NFE buys nothing. Note the truncation term at `t_end=2e-3` (1.53) already exceeds
+dpm3's error at 78 NFE (1.22): stopping early costs more than discretizing
+coarsely, which is the mechanism behind paper Table 4's 4.39 FID @ 15 NFE → 5.52
+@ 20.
+
+The design decision that made this measurable: **the
 CIFAR-10 checkpoint's schedule is the *discretised* VP-linear one and is not
-interchangeable with `src/schedule.py`** — measured gap `max|Δλ| = 4.7e-2` and
-**~5% in `f`**, so reusing the continuous coefficients for arms A/B would have put
-a systematic error under every Tier-3 curve. `DiscreteSchedule` therefore reads
+interchangeable with `src/schedule.py`** — measured on the real betas at
+`max|Δλ| = 4.741e-2` and **5.0% in `f`** (matching the synthetic-beta prediction
+in `tests/test_tier3.py` to the digit), so reusing the continuous coefficients for
+arms A/B would have put a systematic ~5% error under every Tier-3 curve. `DiscreteSchedule` therefore reads
 α, σ, λ, t(λ) straight off the checkpoint's own `NoiseScheduleVP` and gets `f`,
 `g²` from **one** central difference of λ, via the VP identity `λ' = f/σ²`:
 

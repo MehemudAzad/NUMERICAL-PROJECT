@@ -63,7 +63,7 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r requirement
 Run the tests from the repo root:
 
 ```bash
-python -m pytest          # 105 passed, 3 skipped (Tier-3 only)
+python -m pytest          # 108 passed
 ```
 
 Reproduce every figure and results CSV from a clean clone:
