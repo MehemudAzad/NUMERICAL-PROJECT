@@ -33,19 +33,34 @@ __all__ = [
 
 
 # --- the probability-flow ODE, written once ---------------------------------
+#
+# ``sched=None`` means the continuous VP-linear schedule of :mod:`src.schedule`,
+# which is what Tiers 1 and 2 use. Tier 3 passes a
+# :class:`src.tier3.DiscreteSchedule` instead, because the CIFAR-10 checkpoint's
+# own schedule is the *discretised* VP-linear one and differs from the
+# continuous form by O(1/N). Threading it through here rather than writing a
+# second GPU right-hand side keeps the PF-ODE defined exactly once for all
+# three tiers, which is the claim the report makes about arms A and B.
 
-def pf_rhs_t(eps_fn, x, t):
+def pf_rhs_t(eps_fn, x, t, sched=None):
     """PF-ODE in t (arm A):  dx/dt = f(t) x + g^2(t)/(2 sigma(t)) * eps(x, t)."""
-    return f(t) * x + g2(t) / (2.0 * sigma(t)) * eps_fn(x, t)
+    if sched is None:
+        return f(t) * x + g2(t) / (2.0 * sigma(t)) * eps_fn(x, t)
+    return sched.f(t) * x + sched.g2(t) / (2.0 * sched.sigma(t)) * eps_fn(x, t)
 
 
-def pf_rhs_lambda(eps_fn, x, lam):
+def pf_rhs_lambda(eps_fn, x, lam, sched=None):
     """PF-ODE in lambda (arm B):  dx/dlambda = sigma_hat(l)^2 x - sigma_hat(l) eps(x, t(l)).
 
     Same trajectory as :func:`pf_rhs_t`, reparameterised by the half log-SNR
     (paper eq. E.1). ``eps_fn`` still takes ``t``, so we invert the schedule here.
+
+    Only ``t(lambda)`` is schedule-dependent: ``sigma_hat(lam) = 1/sqrt(1 + e^{2
+    lam})`` follows from ``lambda = log alpha - log sigma`` and ``alpha^2 +
+    sigma^2 = 1`` alone, so it is exact for *any* variance-preserving schedule,
+    the discrete one included.
     """
-    t = t_of_lmbda(lam)
+    t = t_of_lmbda(lam) if sched is None else sched.t_of_lmbda(lam)
     sh = sigma_hat(lam)
     return sh**2 * x - sh * eps_fn(x, t)
 

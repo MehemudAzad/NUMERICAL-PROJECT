@@ -18,7 +18,12 @@ torch==2.14.0          # needed by third_party/dpm_solver_pytorch.py (arm C), CP
 jupyterlab
 ipykernel
 
-# --- Tier 3 only (run on Kaggle T4, not locally) ---
+# --- Tier 3 only (M9; runs on a Kaggle T4, not on a laptop) ---
+# notebooks/09_tier3_cifar10.ipynb pip-installs these itself on Kaggle, so they
+# stay out of the pinned laptop environment -- tests/test_tier3.py deliberately
+# needs neither (it builds the checkpoint's schedule from synthetic betas).
 # diffusers
-# pytorch-fid
 # accelerate
+#
+# pytorch-fid: NOT needed. FID was cut at Gate G2 (guide Part 5: "Cut FID
+# entirely. Ship Tier 3 as L2-to-reference only -- that is a legitimate result").

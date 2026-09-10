@@ -62,6 +62,36 @@ STEPPERS = {"euler": euler, "midpoint": midpoint, "heun3": heun3, "rk4": rk4}
 NFE_PER_STEP = {"euler": 1, "midpoint": 2, "heun3": 3, "rk4": 4, "ab2": 1}
 
 
+# --- backend-agnostic state helpers ----------------------------------------
+#
+# Tiers 1-2 march float64 numpy arrays; Tier 3 (guide step 10) marches a float32
+# CUDA torch tensor of shape (n, 3, 32, 32). The four steppers above already
+# work on both -- they are pure arithmetic, and `np.float64 * torch.Tensor`
+# returns a `torch.Tensor` with the tensor's dtype and device preserved -- so
+# only these two spots in `integrate` needed generalising. Both duck-type on a
+# method numpy arrays do not have, which keeps this module numpy-only: it must
+# never import torch (Tiers 1-2 run on laptops with no CUDA at all).
+
+
+def _copy_state(x0):
+    """Copy an initial state without forcing it into float64 numpy.
+
+    Tier 3's float32 dtype and CUDA device must survive: float32 *is* the
+    measurement floor there (guide step 10), and silently promoting to float64
+    would both change the physics being measured and blow up GPU memory.
+    """
+    if hasattr(x0, "clone"):  # torch.Tensor
+        return x0.clone()
+    return np.array(x0, dtype=np.float64, copy=True)
+
+
+def _all_finite(xv) -> bool:
+    """True if every entry is finite, for numpy arrays or torch tensors."""
+    if hasattr(xv, "isfinite"):  # torch.Tensor; numpy arrays have no such method
+        return bool(xv.isfinite().all())
+    return bool(np.all(np.isfinite(xv)))
+
+
 def integrate(rhs, x0, grid, stepper):
     """March ``rhs`` along ``grid`` and return ``(x_final, nfe)``.
 
@@ -74,7 +104,7 @@ def integrate(rhs, x0, grid, stepper):
     ``nfe = nan`` (the run is diverged; a partial NFE count is not meaningful).
     """
     grid = np.asarray(grid, dtype=np.float64)
-    x = np.array(x0, dtype=np.float64, copy=True)
+    x = _copy_state(x0)
     n = len(grid) - 1
 
     calls = 0
@@ -85,7 +115,7 @@ def integrate(rhs, x0, grid, stepper):
         return rhs(xv, node)
 
     def diverged(xv) -> bool:
-        return not np.all(np.isfinite(xv))
+        return not _all_finite(xv)
 
     if stepper == "ab2":
         if n == 0:
