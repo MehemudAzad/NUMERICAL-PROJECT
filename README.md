@@ -44,6 +44,7 @@ results/      git-tracked CSVs (schema: src/runlog.py). Big *.pt/*.npz are gitig
 figures/      git-tracked PNGs
 docs/         the guide, the proposal deck, the paper
 run_all.sh    reproduces every figure and CSV from a clean clone
+report/       LaTeX report — `cd report && latexmk -pdf main.tex`
 ```
 
 ## Setup
@@ -63,7 +64,7 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r requirement
 Run the tests from the repo root:
 
 ```bash
-python -m pytest          # 108 passed
+python -m pytest          # 111 passed
 ```
 
 Reproduce every figure and results CSV from a clean clone:

@@ -121,6 +121,7 @@ results/           git-tracked CSVs. Big *.pt/*.npz are gitignored.
 figures/           git-tracked PNGs.
 docs/              the guide, the deck, the paper, the chat log, the rules.
 run_all.sh         clean-clone reproduction: tests + notebooks 01-08, 10  [M10]
+report/            LaTeX report (TikZ diagrams, pgfplots) -> report/main.pdf
 ```
 
 ---
@@ -158,9 +159,11 @@ run_all.sh         clean-clone reproduction: tests + notebooks 01-08, 10  [M10]
 | M9 | Tier-3 CIFAR-10 Kaggle notebook | ✅ | `src/tier3.py`, `tests/test_tier3.py` (18), `notebooks/09_tier3_cifar10.ipynb` (committed **with** its Kaggle outputs), `results/tier3_error.csv` (72 rows), `results/tier3_decomposition.csv`, `figures/09_*.png` |
 | M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ✅ | `notebooks/10_report.ipynb`, `run_all.sh`, `tests/test_report.py` (19), `results/master_order_table.csv`, `results/crossover_summary.csv`, `results/predictions_ledger.csv`, `results/proposal_coverage.csv`, `figures/10_*.png` |
 
-`python -m pytest` → **108 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
-+5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10). All green now that the Kaggle run's
-CSVs are committed — the Tier-3 checks that used to skip are live.
+`python -m pytest` → **111 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
++5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10, +3 the `fit_order` floor). All green
+now that the Kaggle run's CSVs are committed — the Tier-3 checks that used to skip
+are live. `run_all.sh` has been executed end to end: the raw sweeps reproduce to
+1.8e-15 absolute and the fitted slopes to 4.2e-5.
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
@@ -281,6 +284,20 @@ Run on a Kaggle T4, 64 samples, `google/ddpm-cifar10-32`, 3005 network calls in
 | C/dpm1 | 1 | 0.99 | 1.00 | **0.81** |
 | C/dpm2 | 2 | 2.03 | 2.02 | **2.19** |
 | C/dpm3 | 3 | 3.09 | 3.08 | **2.47** |
+
+**Correction to the naive read of that table.** `fit_order` scores windows as
+`r2 + 0.01*width`, so a wide window that runs into the reference floor can
+outscore a narrower clean one --- the same failure mode M5 documented for `ab2`.
+Three Tier-3 curves reach the floor. `fit_order` now takes an optional `floor=`
+(M10), and excluding points within `3*FLOOR` before fitting gives:
+**`dpm3` 2.473 -> 2.995** (1 point dropped) and `dpm2` 2.191 -> 2.244. So
+**DPM-Solver-3 essentially holds its order against a real network** --- the one
+scheme here that does, and a result favourable to the base paper. `B/rk4` moves
+2.231 -> 1.099 but loses 2 of 8 points, leaving no clean asymptotic window;
+neither number is trustworthy for that row. The order-collapse headline is
+unaffected: the curves that drive it (`A/rk4` at 12x the floor, `B/euler` at
+42x) drop nothing and are unchanged. Both columns ship in
+`results/master_order_table.csv`.
 
 Worst `|measured − theory|` goes **0.094 (T1) → 0.084 (T2) → 2.790 (T3)**, a 33x
 degradation, with 8 of 9 fits more than 0.15 below theory. This is the project's
