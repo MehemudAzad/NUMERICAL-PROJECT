@@ -1,0 +1,20 @@
+bucket,item,note
+delivered,"The thesis: solvers judged by order, stability and cost per NFE, not FID","All three measured across three tiers; nine notebooks, five results CSVs."
+delivered,Measured convergence order against ground truth,"M5/M7: every solver in every arm within +-0.1 of theory on Tiers 1-2, R2 > 0.9997."
+delivered,Stability map at the stiff boundary,"M6: h_max(kappa) swept over 5 decades x 5 steppers x 2 arms; see the refuted prediction in the ledger -- the map is flat, which is itself the finding."
+delivered,Efficiency frontier (error vs cost),"Section 4b, figures/10_efficiency_frontier.png."
+delivered,Tier-1 kappa sweep,"M5/M6/M8, kappa in {1, 10, 1e2, 1e3, 1e4}; M6 stress-tested to 1e8."
+pending,Tier 3 under neural approximation error,"M9, google/ddpm-cifar10-32 on a Kaggle T4."
+substituted,"Efficiency frontier in NFE, not wall-clock","Paper Table 7: runtime is linear in NFE and near-identical across solvers, so wall-clock carries no extra information."
+substituted,"Tier-1 kappa sweep at fixed d, not the deck's d = 2..100 sweep","The linear case decouples into d independent scalar ODEs -- dimension changes nothing. (Guide, Part 3, item 1.)"
+substituted,"Tier 2 point/Gaussian mixture, not a Swiss roll","A continuous Swiss-roll density has no closed-form score; the deck claims one. M7 uses swiss_roll(n=8) as mixture *centers*, which does."
+substituted,"DOP853 reference at rtol 1e-13, not 1e-14","SciPy rejects rtol below ~2.2e-14. Convergence verified by recomputing at 1e-11 (agreement 6.9e-13, far below every measured error)."
+substituted,"Authors' DPM-Solver code + analytic oracle, not a reimplementation","Tests the real published implementation with zero model error, and removes a week of work. Gate G1 pins the two together to 5.5e-16."
+substituted,"Tier-3 checkpoint google/ddpm-cifar10-32, targets paper Table 4",One-line download instead of fragile Drive links. The deck's 4.70 FID target is from a different (continuous VP-deep) checkpoint.
+dropped,RK45 / adaptive solver,"Step size is not a free variable for an adaptive method, so 'order vs h' and 'max stable h' are not defined on it. AB2 restores the deck's multistep row."
+dropped,FID-5k vs NFE on Tier 3,"CUT AT GATE G2, as the guide permits. L2-to-reference is the primary read-out and shipped alone. FID is an image-quality metric -- the standard this project argues against grading solvers by."
+dropped,FID-50k as the primary Tier-3 metric,50k x 35 configs is roughly ten GPU-hours the project did not have.
+added,Arm B (the lambda-reparameterised ODE),"Separates DPM-Solver's two ideas: A vs B isolates the reparameterisation, B vs C isolates the exact linear treatment."
+added,Gate G1 (DDIM == DPM-Solver-1 to machine precision),Measured 5.5e-16 against a 1e-14 bar; catches broken lambda handling before anything downstream is built.
+added,The crossover study (M8),"Locates h* where order 3 overtakes order 1, explaining an unexplained blow-up in the paper's own Table 6."
+added,Three-way Tier-3 error decomposition,"Discretization / t_end truncation / network+precision floor, separated and measured (M9 section 7)."

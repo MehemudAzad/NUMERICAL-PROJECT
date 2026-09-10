@@ -110,6 +110,8 @@ src/               pure-python engine — NO gpu, NO plotting. Unit-tested.
   arm_c.py         wrapper around third_party/ for DPM-2/3   [M4 ✅]
   metrics.py       sliding-window log-log order fitter       [M5]
   stability.py     bisection for max stable h                [M6]
+  crossover.py     every sign change of log(err3)-log(err1)  [M8]
+  tier3.py         DiscreteSchedule + network oracle (GPU)   [M9]
 tests/             pytest; runs in seconds on the laptop. Gate G1 lives here.
 notebooks/         one NN_*.ipynb per milestone
 third_party/       vendored dpm_solver_pytorch.py (unmodified, pinned commit
@@ -118,6 +120,7 @@ third_party/       vendored dpm_solver_pytorch.py (unmodified, pinned commit
 results/           git-tracked CSVs. Big *.pt/*.npz are gitignored.
 figures/           git-tracked PNGs.
 docs/              the guide, the deck, the paper, the chat log, the rules.
+run_all.sh         clean-clone reproduction: tests + notebooks 01-08, 10  [M10]
 ```
 
 ---
@@ -152,11 +155,13 @@ docs/              the guide, the deck, the paper, the chat log, the rules.
 | M6 | stability envelope, κ sweep | ✅ | `src/stability.py`, `tests/test_stability.py` (6), `notebooks/06_stability.ipynb`, `results/stability_envelope.csv`, `figures/06_stability_envelope.png` |
 | M7 | Tier-2 mixture testbed + DOP853 reference + order under curvature | ✅ | `MixtureTier2`/`swiss_roll`/`dop853_reference` in `src/testbeds.py`, `tests/test_tier2.py` (13), `notebooks/07_tier2.ipynb`, `results/tier2_order.csv`, `figures/07_error_vs_h.png`, `figures/07_error_vs_nfe.png` |
 | **M8** | **crossover study (h\* where order-3 overtakes order-1) — headline** | ✅ | `src/crossover.py`, `tests/test_crossover.py` (7), `notebooks/08_crossover.ipynb`, `results/crossover_sweep.csv`, `figures/08_crossover.png` |
-| M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ **next** | |
-| M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ⬜ | |
+| M9 | Tier-3 CIFAR-10 Kaggle notebook | ✅ | `src/tier3.py`, `tests/test_tier3.py` (18), `notebooks/09_tier3_cifar10.ipynb`; **owner must run it on Kaggle** to produce `results/tier3_error.csv`, `results/tier3_decomposition.csv`, `figures/09_*.png` |
+| M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ✅ | `notebooks/10_report.ipynb`, `run_all.sh`, `tests/test_report.py` (19), `results/master_order_table.csv`, `results/crossover_summary.csv`, `results/predictions_ledger.csv`, `results/proposal_coverage.csv`, `figures/10_*.png` |
 
-`python -m pytest` → **71 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
-+5 M5, +6 M6, +13 M7, +7 M8).
+`python -m pytest` → **105 passed, 3 skipped** (108 collected; was 19 as of commit `27dd657`;
++14 M3, +7 M4, +5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10). The 3 skips are
+Tier-3 checks that need `results/tier3_error.csv`; they turn green once the
+Kaggle run's CSVs are committed.
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
@@ -260,6 +265,58 @@ non-monotonic at the coarsest grids tested (a real dip-then-rise, not noise —
 visible directly in `figures/08_crossover.png`), which is exactly why
 `crossover_h` reports *every* sign change rather than assuming a single
 crossing; in every group actually swept here there was only one anyway.
+
+**M9 — Tier 3 is built and validated, but the numbers are the owner's to
+produce.** `src/tier3.py` + `notebooks/09_tier3_cifar10.ipynb` are complete and
+smoke-tested end to end (stub UNet, CPU); `results/tier3_*.csv` appear only after
+the notebook is run on a Kaggle T4. The design decision that mattered: **the
+CIFAR-10 checkpoint's schedule is the *discretised* VP-linear one and is not
+interchangeable with `src/schedule.py`** — measured gap `max|Δλ| = 4.7e-2` and
+**~5% in `f`**, so reusing the continuous coefficients for arms A/B would have put
+a systematic error under every Tier-3 curve. `DiscreteSchedule` therefore reads
+α, σ, λ, t(λ) straight off the checkpoint's own `NoiseScheduleVP` and gets `f`,
+`g²` from **one** central difference of λ, via the VP identity `λ' = f/σ²`:
+
+    f(t) = σ(t)² λ'(t)        g²(t) = -2σ(t)² λ'(t) = -2 f(t)
+
+Deriving both from a single FD is what makes `f/λ' ≡ σ²` hold to **1.1e-16**
+rather than approximately — which is precisely the identity that makes arm A and
+arm B the *same ODE*. `tests/test_tier3.py` checks that end to end (both arms
+integrated at four resolutions; the gap falls 2.5e-4 → 3.9e-7 monotonically).
+Note the discrete schedule's `log α` is piecewise linear, so its `f` is a
+**staircase** and the arm-A right-hand side is genuinely discontinuous at the 1000
+knots — that caps how cleanly RK4 closes the gap, and is why the test asserts
+convergence rather than a single tolerance.
+
+Two dtypes are used on purpose: **float32** for the schedule handed to
+`DPM_Solver` (it multiplies coefficients into the state, so float64 would promote
+the batch and then fail inside the float32 UNet) and **float64, on CPU** for
+`DiscreteSchedule` (λ ≈ 5 with `dt = 1e-5` is hopeless in float32 — rounding
+alone costs ~0.03 in the derivative). Both are built from the same betas.
+
+`src/solvers.py:integrate` and `src/testbeds.py:pf_rhs_*` were generalised
+(backend-agnostic state; optional `sched=`) rather than duplicated, so **the same
+integrator and the same PF-ODE definition march all three tiers** — which is the
+claim the report makes about arms A and B. Both edits are backward compatible;
+the 71 pre-existing tests were unaffected.
+
+**M10 — every verdict in the report is computed, not typed.**
+`notebooks/10_report.ipynb` runs no experiments; it reads `results/*.csv` and
+derives the master order table, the crossover summary, the predictions ledger and
+the proposal-coverage table. It degrades gracefully when Tier 3 is absent (marks
+those rows *pending*), so it was verified locally before the Kaggle run.
+
+One result worth flagging before the report is written: the guide's Part-5
+prediction *"RK4 wins on error per step and loses on error per NFE to
+DPM-Solver-3 — that is your thesis in one sentence"* comes out **refuted on the
+analytic tiers**. RK4 beats `dpm3` on *both* axes there (Tier 1 κ=10 at NFE=192:
+`4.7e-8` vs `2.3e-6`). This is not a bug: M5/M7's sweeps deliberately start past
+each solver's pre-asymptotic region, so their overlap is **NFE 64–576**, deep in
+the asymptotic regime where RK4's `h⁴` simply dominates. DPM-Solver's advantage is
+claimed at **10–20 NFE**, which those sweeps never visit. Tier 3 sweeps exactly
+that band (10–120), so it is the one place this prediction can actually be tested
+— worth stating that way in the report rather than either quietly dropping the
+prediction or claiming the analytic tiers refuted the paper.
 
 **Gotcha found in `third_party/dpm_solver_pytorch.py`:** for `schedule='linear'`,
 `NoiseScheduleVP(..., dtype=...)` is silently ignored — `get_time_steps()` builds
@@ -420,6 +477,20 @@ decomposition (discretization / `t_end` truncation / network approximation).
   this fix and silently gets ~1e-7-floored timesteps.
 - Notebooks are committed **with** their output figures (~400 KB each). To commit
   clean: `jupyter nbconvert --clear-output --inplace notebooks/NN_*.ipynb`.
+- **Tier 3 must never import `src/arm_c.py`.** Its `torch.set_default_dtype(
+  torch.float64)` side effect would build the UNet in float64 and make
+  `get_time_steps` emit float64 grids. `src/tier3.py` imports `third_party`
+  directly and `sample_dpm_solver_t3` raises a clear error if the ambient default
+  has been changed, so this fails loudly rather than at 2 a.m.
+- **`t_end` on Tier 3 cannot go below `1/total_N` = 1e-3.** The discrete schedule
+  tabulates `t` on `linspace(0,1,1001)[1:]`; below the floor `inverse_lambda`
+  extrapolates off the table. The paper's ε = 1e-4 row of Table 6 is therefore not
+  reachable with this checkpoint, and M9's truncation study sweeps `t_end` *down
+  toward* the floor instead of past it.
+- `NoiseScheduleVP('discrete', ...)` silently truncates the beta array via
+  `numerical_clip_alpha` if λ(T) < −5.1. For this checkpoint λ(T) ≈ −5.06, *just*
+  inside — but a clip would move `t_0 = 1/total_N` without warning, so notebook 09
+  asserts `ns.total_N == 1000`.
 - Notebook path bootstrap (works from anywhere in the repo):
   ```python
   import sys, pathlib

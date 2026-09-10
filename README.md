@@ -43,6 +43,7 @@ third_party/  vendored DPM-Solver (unmodified, pinned commit, MIT — see its RE
 results/      git-tracked CSVs (schema: src/runlog.py). Big *.pt/*.npz are gitignored
 figures/      git-tracked PNGs
 docs/         the guide, the proposal deck, the paper
+run_all.sh    reproduces every figure and CSV from a clean clone
 ```
 
 ## Setup
@@ -62,8 +63,19 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r requirement
 Run the tests from the repo root:
 
 ```bash
-python -m pytest
+python -m pytest          # 105 passed, 3 skipped (Tier-3 only)
 ```
+
+Reproduce every figure and results CSV from a clean clone:
+
+```bash
+./run_all.sh              # tests, then notebooks 01–08 and 10
+./run_all.sh --tests-only # just the suite
+```
+
+`run_all.sh` deliberately skips notebook 09 — Tier 3 needs a CUDA GPU and runs on
+a Kaggle T4 (Internet ON, Accelerator T4 ×1). Its outputs are committed, so the
+report notebook reads them without a GPU present.
 
 ## Milestone status
 
@@ -78,7 +90,24 @@ python -m pytest
 | M6 | `src/stability.py` + κ-sweep stability envelope | ✅ done |
 | M7 | Tier-2 mixture testbed + reference + order under curvature | ✅ done |
 | M8 | Crossover study (h\* where order-3 overtakes order-1) | ✅ done |
-| M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ next |
-| M10 | Final figures, `run_all`, report tables | ⬜ |
+| M9 | Tier-3 CIFAR-10 Kaggle notebook (`src/tier3.py`, notebook 09) | ✅ done |
+| M10 | Final figures, `run_all.sh`, report tables (notebook 10) | ✅ done |
 
 Milestones are done **sequentially**, one owner at a time.
+
+## Report deliverables
+
+`notebooks/10_report.ipynb` runs no experiments — it reads `results/*.csv` and
+emits the guide's Part-5 checklist:
+
+| Artifact | What it is |
+|---|---|
+| `results/master_order_table.csv` | every (tier, arm, solver): theoretical order, measured slope, fit window, R² |
+| `results/crossover_summary.csv` | `h*` and `nfe3*` per testbed and κ — the headline result |
+| `results/predictions_ledger.csv` | the guide's six predictions, each marked confirmed / refuted / narrowed **from the data** |
+| `results/proposal_coverage.csv` | the honest ledger vs the proposal deck: delivered / substituted / dropped / added |
+| `figures/10_error_vs_nfe_all.png` | error vs NFE, every tier, every arm |
+| `figures/10_efficiency_frontier.png` | error per NFE — higher order is not automatically cheaper |
+
+FID was **cut at Gate G2**, as the guide permits: L2-to-reference is the primary
+Tier-3 read-out and ships alone.
