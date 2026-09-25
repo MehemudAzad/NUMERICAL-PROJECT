@@ -34,6 +34,8 @@ def max_stable_h(
     t_end: float = 1e-3,
     n_lo: int = 2,
     n_hi: int = 4096,
+    factor: float = 10.0,
+    ref=None,
 ) -> float:
     """The largest stable step size for ``stepper`` on ``tb``, arm ``"A"`` or
     ``"B"``, found by bisecting on step count between ``n_lo`` and ``n_hi``.
@@ -41,14 +43,22 @@ def max_stable_h(
     Returns the ``h`` of the coarsest (smallest-``n``) grid that still stays
     bounded, or ``nan`` if even ``n_hi`` steps diverge (the method is unstable
     across the whole tested range).
+
+    ``factor`` and ``ref`` are :func:`diverged`'s own divergence-rule knobs,
+    passed straight through (M12.2: how sensitive is "stable" to the choice of
+    rule?). The default (``factor=10``, ``ref=None`` meaning ``x_T``) is what
+    every earlier milestone used; a stricter rule -- e.g. ``factor=2`` against
+    the largest data-mode norm rather than the noise norm -- is a one-line
+    sensitivity check, not a different function.
     """
     rhs = tb.rhs_t if arm == "A" else tb.rhs_lambda
     gfun = grid_t if arm == "A" else grid_lambda
     xT = tb.x_T(1)
+    ref_norm = xT if ref is None else ref
 
     def stable(n: int) -> bool:
         x, _ = integrate(rhs, xT, gfun(T, t_end, n), stepper)
-        return not diverged(x, xT)
+        return not diverged(x, ref_norm, factor=factor)
 
     if not stable(n_hi):
         return np.nan

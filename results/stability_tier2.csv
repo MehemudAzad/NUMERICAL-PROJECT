@@ -1,0 +1,11 @@
+tier,testbed,arm,solver,order,kappa,h,nfe,err_l2,diverged,seed
+2,mog8,A,euler,1,nan,0.49950000000000006,nan,nan,0,0
+2,mog8,A,midpoint,2,nan,0.49950000000000006,nan,nan,0,0
+2,mog8,A,heun3,3,nan,0.49950000000000006,nan,nan,0,0
+2,mog8,A,rk4,4,nan,0.19979999999999998,nan,nan,0,0
+2,mog8,A,ab2,2,nan,0.49950000000000006,nan,nan,0,0
+2,mog8,B,euler,1,nan,4.791346669694551,nan,nan,0,0
+2,mog8,B,midpoint,2,nan,4.791346669694551,nan,nan,0,0
+2,mog8,B,heun3,3,nan,4.791346669694551,nan,nan,0,0
+2,mog8,B,rk4,4,nan,4.791346669694551,nan,nan,0,0
+2,mog8,B,ab2,2,nan,4.791346669694551,nan,nan,0,0

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.crossover import crossover_h
+from src.crossover import crossover_h, crossover_nfe
 
 
 def test_clean_power_laws_cross_at_the_analytic_point():
@@ -69,6 +69,38 @@ def test_ignores_nonfinite_and_nonpositive_points():
     # must not raise, and any crossing found must lie within that overlap.
     for c in crossings:
         assert 0.05 <= c <= 0.5
+
+
+def test_crossover_nfe_is_the_same_axis_agnostic_core_as_crossover_h():
+    """crossover_nfe and crossover_h must be the same function under the hood
+    -- feeding both the identical (x, err) pairs must give identical answers,
+    whatever the x-axis is called."""
+    C1, C3 = 0.4, 2.0
+    xs = np.logspace(-3, 0, 40)
+    err1 = C1 * xs
+    err3 = C3 * xs**3
+    assert crossover_nfe(xs, err1, xs, err3) == pytest.approx(crossover_h(xs, err1, xs, err3))
+
+
+def test_crossover_nfe_at_matched_cost():
+    """Order 1 needs N = 1/h calls, order 3 needs N = 3/h (guide step 11 /
+    M12.3: DPM-Solver-3 spends 3x the NFE of DPM-Solver-1 per macro step).
+    With err1 = C1 h, err3 = C3 h^3, matched-h crossing is at
+    h* = sqrt(C1/C3); substituting h = 1/N (order 1) and h = 3/N (order 3)
+    into the two error curves and solving err1(N) = err3(N) gives
+    N* = sqrt(27 C3 / C1) analytically -- an independent derivation from
+    crossover_nfe's own log-log-interpolation method, so this checks the
+    function against closed-form algebra, not against itself."""
+    C1, C3 = 0.4, 2.0
+    macro = np.logspace(-2, 2, 4000)  # macro step count M; h = 1/M, same grid for both orders
+    nfe1 = macro                 # order 1: 1 NFE/step
+    err1 = C1 / macro            # = C1 h
+    nfe3 = 3.0 * macro           # order 3: 3 NFE/step, same h
+    err3 = C3 / macro**3         # = C3 h^3
+
+    n_star_analytic = np.sqrt(27.0 * C3 / C1)
+    (n_star,) = crossover_nfe(nfe1, err1, nfe3, err3)
+    assert n_star == pytest.approx(n_star_analytic, rel=1e-3)
 
 
 def test_real_solver_curves_locate_a_crossing_in_the_swept_range():
