@@ -234,18 +234,38 @@ def make_eps_fn(model_fn):
     return eps_fn
 
 
-def sample_dpm_solver_t3(model_fn, ns: NoiseScheduleVP, x_T, t_start, t_end, order, steps):
-    """Arm C on Tier 3: fixed-order singlestep DPM-Solver-`order`, uniform in lambda.
+def sample_dpm_solver_t3(
+    model_fn,
+    ns: NoiseScheduleVP,
+    x_T,
+    t_start,
+    t_end,
+    order,
+    steps,
+    *,
+    method: str = "singlestep_fixed",
+    skip_type: str = "logSNR",
+):
+    """Arm C on Tier 3: DPM-Solver-`order`, uniform in lambda by default.
 
     Same settings as :func:`src.arm_c.sample_dpm_solver` (guide step 5) --
-    ``algorithm_type="dpmsolver"``, ``method="singlestep_fixed"`` so orders are
-    not mixed, ``skip_type="logSNR"`` so h is constant, ``denoise_to_zero=False``
-    so the endpoint does not move -- but driven by a network instead of an
-    analytic oracle, and with no global dtype side effect.
+    ``algorithm_type="dpmsolver"``, ``denoise_to_zero=False`` so the endpoint
+    does not move -- but driven by a network instead of an analytic oracle,
+    and with no global dtype side effect.
 
-    Returns ``(x_final, nfe)``. As on Tiers 1-2, ``singlestep_fixed``'s real cost
-    is ``(steps // order) * order``, which is what gets recorded; pass a `steps`
-    that is a multiple of `order` to spend the whole budget.
+    ``method`` and ``skip_type`` (M11, guide step 6 revisited) default to M9's
+    exact settings, so every existing call site reproduces byte-for-byte.
+    Passing ``method="singlestep"`` gives the paper's "DPM-Solver-fast" (mixes
+    orders <= `order` to spend exactly `steps` NFE -- the vendored docstring's
+    own words); ``skip_type="time_quadratic"`` with ``order=1`` gives DDIM on
+    the grid the paper's Figure 4 actually uses (DDIM = DPM-Solver-1 on *any*
+    grid, so this is still exact, just not uniform in lambda).
+
+    Returns ``(x_final, nfe)``. NFE is measured, not assumed, and the two
+    methods spend it differently: ``singlestep_fixed``'s real cost is
+    ``(steps // order) * order`` (M9); every other method (including
+    ``singlestep``) spends exactly ``steps``, per the vendored solver's own
+    contract ("The total number of function evaluations (NFE) == steps").
     """
     if torch.get_default_dtype() != torch.float32:
         raise RuntimeError(
@@ -262,8 +282,9 @@ def sample_dpm_solver_t3(model_fn, ns: NoiseScheduleVP, x_T, t_start, t_end, ord
             t_start=t_start,
             t_end=t_end,
             order=order,
-            skip_type="logSNR",
-            method="singlestep_fixed",
+            skip_type=skip_type,
+            method=method,
             denoise_to_zero=False,
         )
-    return x_final, (steps // order) * order
+    nfe = (steps // order) * order if method == "singlestep_fixed" else steps
+    return x_final, nfe

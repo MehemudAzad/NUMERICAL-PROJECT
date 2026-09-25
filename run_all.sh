@@ -8,8 +8,8 @@
 #   ./run_all.sh --no-install # skip venv creation (use the current environment)
 #
 # Tiers 1 and 2 are pure NumPy and run on any laptop in a few minutes. Tier 3
-# (notebook 09) needs a CUDA GPU and a checkpoint download, so it is NOT run
-# here -- see the notice printed at the end. Its outputs are committed to
+# (notebooks 09, 11) needs a CUDA GPU and a checkpoint download, so neither is
+# run here -- see the notice printed at the end. Their outputs are committed to
 # results/ and figures/, and notebook 10 reads them from there.
 
 set -euo pipefail
@@ -61,7 +61,7 @@ fi
 
 # --- 3. notebooks ----------------------------------------------------------
 # In order: each milestone's notebook writes the results/ CSVs the next ones and
-# the final report read. 09 is skipped (GPU); 10 consumes everything.
+# the final report read. 09 and 11 are skipped (GPU); 10 consumes everything.
 NOTEBOOKS=(
   01_schedule
   02_tier1_testbed
@@ -71,6 +71,7 @@ NOTEBOOKS=(
   06_stability
   07_tier2
   08_crossover
+  12_controls
   10_report
 )
 
@@ -85,13 +86,16 @@ done
 
 # --- 4. Tier 3 notice ------------------------------------------------------
 hr
-echo "4. Tier 3 (notebook 09) -- NOT run here"
+echo "4. Tier 3 (notebooks 09, 11) -- NOT run here"
 echo
-echo "   notebooks/09_tier3_cifar10.ipynb needs a CUDA GPU and downloads the"
-echo "   google/ddpm-cifar10-32 checkpoint. Run it on a Kaggle T4 (Internet ON,"
-echo "   Accelerator: GPU T4 x1), then copy back:"
+echo "   notebooks/09_tier3_cifar10.ipynb and notebooks/11_samples_fid.ipynb"
+echo "   need a CUDA GPU and download the google/ddpm-cifar10-32 checkpoint."
+echo "   Run each on a Kaggle T4 (Internet ON, Accelerator: GPU T4 x1), then"
+echo "   copy back:"
 echo "       results/tier3_error.csv  results/tier3_decomposition.csv"
 echo "       figures/09_tier3_error_vs_nfe.png  figures/09_tier3_decomposition.png"
+echo "       results/tier3_fid.csv  results/tier3_per_image_l2.csv"
+echo "       figures/11_samples_grid.png  figures/11_per_image_l2.png  figures/11_fid_vs_l2.png"
 echo "   and re-run notebooks/10_report.ipynb to fill in the Tier-3 rows."
 if [ -f results/tier3_error.csv ]; then
   echo
@@ -99,6 +103,11 @@ if [ -f results/tier3_error.csv ]; then
 else
   echo
   echo "   [pending] results/tier3_error.csv -- the report above marks Tier 3 pending."
+fi
+if [ -f results/tier3_fid.csv ]; then
+  echo "   [present] results/tier3_fid.csv -- M11's FID anchor is included."
+else
+  echo "   [pending] results/tier3_fid.csv -- M11 (notebook 11) has not been run on Kaggle yet."
 fi
 
 hr

@@ -27,10 +27,29 @@ from src.grids import grid_t
 from src.metrics import l2
 from src.solvers import integrate
 from src.testbeds import GaussianTier1, pf_rhs_lambda, pf_rhs_t
-from src.tier3 import DiscreteSchedule, make_noise_schedule
+from src.tier3 import DiscreteSchedule, make_noise_schedule, sample_dpm_solver_t3
 
 # The CIFAR-10 DDPM checkpoint's betas: linear, 1e-4 -> 0.02 over 1000 steps.
 BETAS = torch.linspace(1e-4, 0.02, 1000, dtype=torch.float64)
+
+
+@pytest.fixture(autouse=True)
+def _float32_ambient_default():
+    """Tier 3's runtime invariant (float32 default dtype -- see src/tier3.py's
+    module docstring), enforced here rather than assumed.
+
+    Whichever test module runs first, `pytest` shares one process: any earlier
+    test file that imports `src.arm_c` sets `torch.set_default_dtype(float64)`
+    as a side effect and never undoes it, which would otherwise make this
+    file's `sample_dpm_solver_t3` calls fail on the dtype guard depending on
+    test *order*, not on anything this file does. Force float32 before every
+    test here and restore whatever was ambient before, so this file's outcome
+    never depends on which other test module happened to run first.
+    """
+    prev = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float32)
+    yield
+    torch.set_default_dtype(prev)
 
 # Times deliberately offset by 5e-4 from the interpolant's knots (spaced 1/N),
 # so the central difference sits inside a single segment.
@@ -201,6 +220,113 @@ def test_torch_ab2_nfe_accounting():
         _decay_rhs, torch.ones(1, 2, dtype=torch.float64), np.linspace(0.0, 1.0, n + 1), "ab2"
     )
     assert nfe == n + 1
+
+
+# --- sample_dpm_solver_t3 (M9's own driver, untested until M11 added the ---
+# --- method/skip_type kwargs) -- a tiny synthetic model_fn, no UNet, no GPU. ---
+# This checks the *plumbing* (NFE bookkeeping, kwargs reach the solver, defaults
+# reproduce M9 byte-for-byte); correctness of DPM-Solver's algebra itself is
+# Gate G1's job (M4) and src/arm_c.py's (on the continuous schedule).
+
+
+def _fake_model_fn(x, t):
+    """Not a network -- just something with the right shape and no NaNs, to
+    exercise the solver's control flow (method, skip_type, NFE accounting)."""
+    return 0.1 * x
+
+
+@pytest.fixture(scope="module")
+def ns32() -> torch.Tensor:
+    return make_noise_schedule(BETAS, dtype=torch.float32)
+
+
+def test_default_kwargs_reproduce_m9_byte_for_byte(ns32):
+    """method/skip_type default to singlestep_fixed/logSNR -- M9's exact call,
+    now with explicit keywords, must return exactly what the old positional
+    call did (this is the "existing call sites still work" guarantee)."""
+    x_T = torch.randn(3, 3, 8, 8, dtype=torch.float32)
+    old_style, nfe_old = sample_dpm_solver_t3(_fake_model_fn, ns32, x_T, 1.0, 1e-3, 2, 10)
+    new_style, nfe_new = sample_dpm_solver_t3(
+        _fake_model_fn, ns32, x_T, 1.0, 1e-3, 2, 10,
+        method="singlestep_fixed", skip_type="logSNR",
+    )
+    assert nfe_old == nfe_new == 10
+    assert torch.equal(old_style, new_style)
+
+
+@pytest.mark.parametrize("order,steps,expected_nfe", [(1, 10, 10), (2, 10, 10), (3, 10, 9)])
+def test_singlestep_fixed_nfe_is_steps_floor_div_order_times_order(ns32, order, steps, expected_nfe):
+    x_T = torch.randn(2, 3, 8, 8, dtype=torch.float32)
+    _, nfe = sample_dpm_solver_t3(_fake_model_fn, ns32, x_T, 1.0, 1e-3, order, steps)
+    assert nfe == expected_nfe
+
+
+def test_singlestep_fast_spends_exactly_steps_nfe(ns32):
+    """DPM-Solver-fast (method='singlestep', mixed orders <= order): the
+    vendored solver's own contract is NFE == steps exactly, unlike
+    singlestep_fixed's floor-to-a-multiple-of-order."""
+    x_T = torch.randn(2, 3, 8, 8, dtype=torch.float32)
+    for steps in (10, 11, 13):
+        _, nfe = sample_dpm_solver_t3(
+            _fake_model_fn, ns32, x_T, 1.0, 1e-3, order=3, steps=steps, method="singlestep",
+        )
+        assert nfe == steps
+
+
+def test_ddim_quadratic_skip_type_runs_and_spends_steps_nfe(ns32):
+    """The paper's Figure 4 baseline: DPM-1 (= DDIM) on a quadratic-in-t grid,
+    not the project's usual uniform-in-lambda one."""
+    x_T = torch.randn(2, 3, 8, 8, dtype=torch.float32)
+    xf, nfe = sample_dpm_solver_t3(
+        _fake_model_fn, ns32, x_T, 1.0, 1e-3, order=1, steps=12, skip_type="time_quadratic",
+    )
+    assert nfe == 12
+    assert xf.shape == x_T.shape
+    assert torch.all(torch.isfinite(xf))
+
+
+def test_rejects_float64_ambient_default(ns32, monkeypatch):
+    """The float32 guard (M9) must still fire with the new kwargs present."""
+    x_T = torch.randn(1, 3, 4, 4, dtype=torch.float32)
+    monkeypatch.setattr(torch, "get_default_dtype", lambda: torch.float64)
+    with pytest.raises(RuntimeError, match="float32"):
+        sample_dpm_solver_t3(_fake_model_fn, ns32, x_T, 1.0, 1e-3, 1, 10)
+
+
+# --- src.imaging.to_uint8 (M11) ---------------------------------------------
+
+
+def test_to_uint8_shape_dtype_and_range():
+    from src.imaging import to_uint8
+
+    x = torch.zeros(2, 3, 5, 5, dtype=torch.float32)
+    x[0] = -1.0  # -> 0
+    x[1] = 1.0  # -> 255
+    out = to_uint8(x)
+    assert out.shape == (2, 5, 5, 3)  # NCHW -> NHWC
+    assert out.dtype == np.uint8
+    assert np.all(out[0] == 0)
+    assert np.all(out[1] == 255)
+
+
+def test_to_uint8_clips_out_of_range_values():
+    from src.imaging import to_uint8
+
+    x = np.array([[[[-3.0, 0.0, 5.0]]]])  # (1, 1, 1, 3), NCHW with c=1... use directly
+    x = np.transpose(x, (0, 3, 1, 2))  # -> (1, 3, 1, 1) NCHW
+    out = to_uint8(x)
+    assert out[0, 0, 0, 0] == 0
+    assert out[0, 0, 0, 1] == 127 or out[0, 0, 0, 1] == 128
+    assert out[0, 0, 0, 2] == 255
+
+
+def test_to_uint8_accepts_numpy_too():
+    from src.imaging import to_uint8
+
+    x = np.random.default_rng(0).uniform(-1, 1, size=(2, 3, 4, 4)).astype(np.float32)
+    out = to_uint8(x)
+    assert out.shape == (2, 4, 4, 3)
+    assert out.dtype == np.uint8
 
 
 def test_torch_divergence_is_flagged():
