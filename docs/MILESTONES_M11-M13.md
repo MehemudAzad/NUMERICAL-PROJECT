@@ -1,6 +1,21 @@
 # Milestones M11–M13 — post-review fixes
 
-**Status:** proposed 2026-09-25, awaiting approval. Nothing here is implemented yet.
+**Status (2026-09-25):** approved and in progress.
+- **Step 0** (notebook 10's title cell) — done.
+- **M12** — done: `notebooks/12_controls.ipynb`, `src/crossover.py`
+  (`crossover_nfe`), `src/stability.py` (`factor`/`ref` kwargs), 4 new tests.
+  All four sub-experiments' numbers land close to this document's own Findings
+  2–6 (independently recomputed, not copied) — see `docs/CLAUDE.md` §6/§11.1.
+- **M11** — code done (`src/imaging.py`, `src/tier3.py`'s new kwargs,
+  `notebooks/11_samples_fid.ipynb`), **the Kaggle run itself has not happened
+  yet**. Part C (FID via `clean-fid`) is the one section that could not be
+  verified locally — no GPU, no network, and an external package this session
+  never imported successfully. See `docs/CLAUDE.md` §11.1 for exactly how to
+  run it and what to send back.
+- **M13** — blocked on M11's Kaggle output. The ledger/report edits that only
+  need M12 (stability, matched-NFE crossover, the citation fix, split-benefit)
+  are already in `report/main.tex`; the FID/samples sections wait for M11.
+
 **Read first:** `docs/CLAUDE.md` (working agreement, M0–M10 specs). Same rules apply:
 plan approved before code, one milestone at a time, notebooks are the deliverable,
 the agent never commits.

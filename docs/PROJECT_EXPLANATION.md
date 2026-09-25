@@ -108,25 +108,49 @@ To calculate numerical error, one needs the exact mathematical solution. We crea
 ## 5. Major Discoveries & Novel Contributions
 
 ### 1. Order Collapse on Real Neural Networks
-* **On smooth math (Tiers 1 & 2):** Every solver achieved its exact theoretical order:
+* **On smooth math (Tiers 1 & 2):** Every solver achieved close to its exact theoretical order:
   * Order 1 $\approx 0.99$ – $1.00$
-  * Order 2 $\approx 2.01$ – $2.02$
-  * Order 3 $\approx 2.94$ – $3.00$
-  * RK4 $\approx 3.94$ – $3.99$
+  * Order 2 $\approx 2.02$ – $2.03$
+  * Order 3 $\approx 3.08$ – $3.09$
+  * RK4 $\approx 3.94$ – $4.00$
 * **On the real neural network (Tier 3):** Higher-order methods **collapsed**!
   * **RK4 collapsed from $3.94 \to 1.21$**
-  * **DPM-Solver-3 collapsed from $2.94 \to 1.32$**
+  * **DPM-Solver-3 collapsed from $3.09 \to 2.47$**
   * **Euler barely dropped ($1.01 \to 0.84$)**
+  * (source: `results/master_order_table.csv`, updated M9/M11 — an earlier
+    draft of this page misquoted the DPM-3 numbers as "$2.94 \to 1.32$",
+    which matches no results file)
 
 #### Why did this happen?
-The paper's convergence proof relies on **Assumption B.1** (that the score function and its higher derivatives are smooth and bounded). Analytic Gaussians satisfy this assumption perfectly. But a real deep neural network (with ReLU/Swish activations, layer norms, and training residuals) is **non-smooth**. High-order Taylor expansions break down when high-order derivatives are rough and noisy!
+The paper's convergence proof relies on **Assumption B.1** (that the model's
+$\lambda$-derivatives exist and are continuous up to order $k{+}1$). Analytic
+Gaussians satisfy this trivially. The checkpoint's UNet uses **SiLU/Swish**
+activations (not ReLU — ReLU is not differentiable at 0, but this network
+does not use it), which *are* smooth, so "the network violates B.1" is hard to
+defend as the mechanism. **M12.1 found a better explanation**: re-running
+Tiers 1–2 at Tier 3's *exact* protocol (`t_end=1e-3`, NFE 3–120, not the
+original sweep's `t_end=0.2`) reproduces most of the order collapse with an
+**exact score and no network at all** — e.g. Tier 2's worst gap from theory is
+1.9 at matched settings vs 0.08 at the original asymptotic settings. The
+defensible claim is *pre-asymptotic behaviour at practitioner NFE budgets*,
+which the network then makes somewhat worse on top of (see
+`notebooks/12_controls.ipynb`, §12.1).
 
 ---
 
 ### 2. The NFE Crossover Point ($h^*$)
 * High-order methods take more network calls per step (DPM-3 takes 3 calls per step; RK4 takes 4).
-* At low budgets (**$\text{NFE} < 15$**), **Order 1 and Order 2 actually beat Order 3**!
-* Order 3 only becomes advantageous if you have a budget of $> 20$ evaluations.
+* At low budgets, **Order 1 can beat Order 3** — this is a direct reproduction
+  of the paper's own Table 6 anomaly (order-3 far worse than order-1 at ~10 NFE).
+* Compared **at matched step size** (M8), the crossover sits around $h^*$
+  corresponding to $\text{NFE} \approx 4$–$9$. Compared **at matched NFE** —
+  the paper's own comparison, since DPM-3 costs 3× DPM-1 per step — the
+  crossover moves to **$\text{NFE} \approx 5$ (Tier 1)**, **9–17 with
+  re-crossings (Tier 2)**, and **$\approx 14$ (Tier 3, the real network)**,
+  a rising trend that reproduces the paper's ~10–12 NFE crossover directly
+  (`results/crossover_matched_nfe.csv`, `notebooks/12_controls.ipynb` §12.3).
+  An earlier draft of this page claimed "Order 3 only becomes advantageous
+  above 20 NFE," which contradicts this data.
 
 ---
 
@@ -145,6 +169,6 @@ If your instructor or examiner asks: **"What did you do in this project and what
 > *In this project, we performed a formal numerical-analysis audit. We tested convergence order, boundary stiffness stability, and error per NFE across three controlled tiers: an exact anisotropic Gaussian, a nonlinear Gaussian mixture, and a real CIFAR-10 UNet.*
 >
 > *Our key findings were:*
-> 1. *While DPM-Solver achieves its theoretical order on smooth analytical problems, its high order collapses on real neural networks because the network's score function violates the paper's smoothness assumption.*
-> 2. *At practical low-step budgets ($\text{NFE} < 15$), low-order solvers match or beat Order 3 because Order 3 spends too many evaluations per step.*
-> 3. *We isolated the two ideas of the paper, showing that coordinate reparameterization ($\lambda$) provides the major stability and error improvement on real networks."*
+> 1. *DPM-Solver achieves its theoretical order under the assumptions the proof actually needs — a smooth score, matched to the step-size range being fit. Most of what looks like "order collapse" on the real network is already present with an exact score, once Tiers 1–2 are measured at the network's own practitioner NFE budgets rather than an easier asymptotic range; the network then makes it moderately worse on top.*
+> 2. *At practical low-step budgets, Order 1 can beat Order 3 — a direct reproduction of the paper's own Table 6 anomaly. Compared the way the paper compares (equal NFE, not equal step count), the crossover rises from ≈5 NFE (the exact linear tier) to ≈14 NFE on the real network, bracketing the paper's own ~10–12.*
+> 3. *Instability comes from curvature, not stiffness: provably absent on the linear, decoupled tier (an exact cancellation), but real and measurable once we tested the project's own stability bisector on the nonlinear tier. The λ-reparameterisation's benefit is not network-specific either — it is largest on the exact analytic tiers and still substantial on the real network."*

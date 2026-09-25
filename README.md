@@ -64,19 +64,19 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r requirement
 Run the tests from the repo root:
 
 ```bash
-python -m pytest          # 111 passed
+python -m pytest          # 125 passed
 ```
 
 Reproduce every figure and results CSV from a clean clone:
 
 ```bash
-./run_all.sh              # tests, then notebooks 01–08 and 10
+./run_all.sh              # tests, then notebooks 01–08, 12, and 10
 ./run_all.sh --tests-only # just the suite
 ```
 
-`run_all.sh` deliberately skips notebook 09 — Tier 3 needs a CUDA GPU and runs on
-a Kaggle T4 (Internet ON, Accelerator T4 ×1). Its outputs are committed, so the
-report notebook reads them without a GPU present.
+`run_all.sh` deliberately skips notebooks 09 and 11 — Tier 3 needs a CUDA GPU
+and runs on a Kaggle T4 (Internet ON, Accelerator T4 ×1). Their outputs are
+committed, so the report notebook reads them without a GPU present.
 
 ## Milestone status
 
@@ -93,8 +93,12 @@ report notebook reads them without a GPU present.
 | M8 | Crossover study (h\* where order-3 overtakes order-1) | ✅ done |
 | M9 | Tier-3 CIFAR-10 Kaggle notebook (`src/tier3.py`, notebook 09) | ✅ done |
 | M10 | Final figures, `run_all.sh`, report tables (notebook 10) | ✅ done |
+| M11 | Samples + FID anchor (`src/imaging.py`, notebook 11) | 🟡 code done, Kaggle run pending |
+| M12 | Controls on the analytic tiers (notebook 12) | ✅ done |
+| M13 | Rewrite the conclusions to match M11+M12 | ⬜ blocked on M11 |
 
-Milestones are done **sequentially**, one owner at a time.
+Milestones are done **sequentially**, one owner at a time. M11–M13 are a
+post-review correction pass — see `docs/MILESTONES_M11-M13.md`.
 
 ## Report deliverables
 
