@@ -93,9 +93,9 @@ committed, so the report notebook reads them without a GPU present.
 | M8 | Crossover study (h\* where order-3 overtakes order-1) | ✅ done |
 | M9 | Tier-3 CIFAR-10 Kaggle notebook (`src/tier3.py`, notebook 09) | ✅ done |
 | M10 | Final figures, `run_all.sh`, report tables (notebook 10) | ✅ done |
-| M11 | Samples + FID anchor (`src/imaging.py`, notebook 11) | 🟡 code done, Kaggle run pending |
+| M11 | Samples + FID anchor (`src/imaging.py`, notebook 11) | ✅ done (Kaggle run complete) |
 | M12 | Controls on the analytic tiers (notebook 12) | ✅ done |
-| M13 | Rewrite the conclusions to match M11+M12 | ⬜ blocked on M11 |
+| M13 | Rewrite the conclusions to match M11+M12 | ⬜ owned by a teammate (`report/main.tex`) |
 
 Milestones are done **sequentially**, one owner at a time. M11–M13 are a
 post-review correction pass — see `docs/MILESTONES_M11-M13.md`.

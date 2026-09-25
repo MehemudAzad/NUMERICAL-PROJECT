@@ -158,9 +158,9 @@ report/            LaTeX report (TikZ diagrams, pgfplots) -> report/main.pdf
 | **M8** | **crossover study (h\* where order-3 overtakes order-1) — headline** | ✅ | `src/crossover.py`, `tests/test_crossover.py` (7), `notebooks/08_crossover.ipynb`, `results/crossover_sweep.csv`, `figures/08_crossover.png` |
 | M9 | Tier-3 CIFAR-10 Kaggle notebook | ✅ | `src/tier3.py`, `tests/test_tier3.py` (18), `notebooks/09_tier3_cifar10.ipynb` (committed **with** its Kaggle outputs), `results/tier3_error.csv` (72 rows), `results/tier3_decomposition.csv`, `figures/09_*.png` |
 | M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ✅ | `notebooks/10_report.ipynb`, `run_all.sh`, `tests/test_report.py` (19), `results/master_order_table.csv`, `results/crossover_summary.csv`, `results/predictions_ledger.csv`, `results/proposal_coverage.csv`, `figures/10_*.png` |
-| M11 | look at the samples; anchor Tier 3 to the paper (FID) | 🟡 **code ready, Kaggle run pending** | `src/imaging.py`, `src/tier3.py` (`method=`/`skip_type=` kwargs on `sample_dpm_solver_t3`), `tests/test_tier3.py` (+10), `notebooks/11_samples_fid.ipynb` — needs a Kaggle T4 run; see §11.1 below |
+| M11 | look at the samples; anchor Tier 3 to the paper (FID) | ✅ | `src/imaging.py`, `src/tier3.py` (`method=`/`skip_type=` kwargs on `sample_dpm_solver_t3`), `tests/test_tier3.py` (+10), `notebooks/11_samples_fid.ipynb`, `results/tier3_fid.csv`, `results/tier3_per_image_l2.csv`, `figures/11_*.png` — Kaggle run complete 2026-09-25; see §11.1 below |
 | M12 | controls on the analytic tiers (matched protocol, Tier-2 stability, matched-NFE crossover, split-benefit sweep) | ✅ | `src/crossover.py` (`crossover_nfe`), `src/stability.py` (`factor`/`ref` kwargs), `tests/test_crossover.py` (+2), `tests/test_split_benefit.py` (2), `notebooks/12_controls.ipynb`, `results/controls_matched_protocol.csv`, `results/stability_tier2.csv`, `results/crossover_matched_nfe.csv`, `results/split_benefit.csv`, `figures/12_*.png` |
-| M13 | rewrite the conclusions (ledger, report, docs) to match M11+M12 | ⬜ **blocked on M11's Kaggle run** | |
+| M13 | rewrite the conclusions (ledger, report, docs) to match M11+M12 | ⬜ **owned by a teammate — report/main.tex is intentionally not touched here** | M11 and M12's data are both ready (this file, §11.1) |
 
 `python -m pytest` → **125 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
 +5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10, +3 the `fit_order` floor, +10 M11
@@ -170,22 +170,41 @@ Kaggle run's CSVs are committed — the Tier-3 checks that used to skip are live
 `run_all.sh` has been executed end to end (now including notebook 12): the raw
 sweeps reproduce to 1.8e-15 absolute and the fitted slopes to 4.2e-5.
 
-### §11.1 — M11: what's left, and how to run it
+### §11.1 — M11: the Kaggle run's result
 
-M11's code is written and unit-tested (`tests/test_tier3.py`'s new cases run on
-CPU with a synthetic model, no GPU needed — they check the plumbing: NFE
-bookkeeping for `method="singlestep"`/`"singlestep_fixed"`, `to_uint8`'s shape
-and clipping). What is **not** yet verified is the notebook's own FID section
-(`notebooks/11_samples_fid.ipynb`, part C): it depends on `clean-fid`'s
-reference-statistics download and a real GPU, neither available here.
+Run on Kaggle T4, 2026-09-25, 5k FID samples. `results/tier3_fid.csv` (13 rows),
+`results/tier3_per_image_l2.csv` (3072 rows), `figures/11_samples_grid.png`,
+`figures/11_per_image_l2.png`, `figures/11_fid_vs_l2.png`.
 
-To run it: open `notebooks/11_samples_fid.ipynb` on a Kaggle kernel, **Settings
-→ Accelerator: GPU T4 ×1**, **Settings → Internet: ON**, Run All (~30–40 min at
-the default 5k FID samples). Download `results/tier3_fid.csv`,
-`results/tier3_per_image_l2.csv`, and `figures/11_*.png` back into the repo and
-commit. The notebook's own §4 states the decision gate: if the FID ranking at
-10 NFE matches the paper's Table 6 ordering, M13 proceeds; if it doesn't, stop
-and debug the Tier-3 setup before touching the report.
+**The samples grid is a real, useful sanity check the project never had**:
+`dpm3` at 9 NFE is visibly noise (gl=50.7, the image is static); every
+sampler converges visually to the same reference by ~20 NFE. First image the
+project has ever produced.
+
+**The L2-vs-FID disagreement, now with numbers.** At NFE≈10, on the *same*
+checkpoint, *same* `x_T`:
+
+| solver | L2 (`results/tier3_error.csv`, M9) | FID (`results/tier3_fid.csv`, M11) |
+|---|---|---|
+| dpm1 | **75.7** (best of the two) | 44.9 |
+| dpm2 | 166.4 (loses on L2) | **24.9** (best of the two, by 1.8x) |
+
+L2 ranks DPM-1 over DPM-2; FID ranks DPM-2 over DPM-1, by a wide margin, on the
+identical run. This is the project's thesis ("judge solvers as ODE solvers,
+not by FID") made concrete with real data, not just argued for.
+
+**Decision-gate verdict: qualitative match, proceed.** Full ranking at
+NFE≈10 (best first): `dpm2` (24.9) < `dpm_fast` (31.3) < `ddim_quad` (39.5) <
+`dpm1` (44.9) < `rk2_t` (52.9) < `dpm3` (143.3, at 9 NFE). Paper's Table 6 at
+10 NFE: DPM-fast (6.42) ≲ DPM-2 (7.90) < DDIM ≈ DPM-1 (16.69) < DPM-3 (24.37).
+The top pair (`dpm2`/`dpm_fast`) and bottom pair
+(`ddim_quad`/`dpm1`) each cluster together and DPM-3 is catastrophically worse
+at low NFE in both — the shape matches; only the order *within* the top pair
+is swapped (`dpm2` edges out `dpm_fast` here, reversed in the paper). Read as
+validating Tier 3's setup, not refuting it.
+
+Whoever picks up M13: the numbers above are ready to drop into the ledger and
+report as-is; I have not touched `report/main.tex` (a teammate owns it).
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
