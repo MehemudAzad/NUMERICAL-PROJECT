@@ -41,6 +41,9 @@ REQUIRED_CSVS = [
 # Produced by M9 on Kaggle. Optional -- a laptop clone is still valid without it.
 TIER3_CSVS = ["tier3_error.csv", "tier3_decomposition.csv"]
 
+# Produced by M12 on the laptop, in the run-log schema.
+M12_CSVS = ["controls_matched_protocol.csv", "stability_tier2.csv"]
+
 # What each convergence sweep is claimed to cover, in the report's order table.
 EXPECTED_COVERAGE = {
     "tier1_order.csv": {
@@ -71,7 +74,7 @@ def test_required_results_csv_exists(name):
     )
 
 
-@pytest.mark.parametrize("name", REQUIRED_CSVS + TIER3_CSVS)
+@pytest.mark.parametrize("name", REQUIRED_CSVS + TIER3_CSVS + M12_CSVS)
 def test_results_csv_conforms_to_the_schema(name):
     """One schema for the whole project, so every table concatenates (step 0)."""
     path = RESULTS / name
@@ -85,8 +88,8 @@ def test_results_csv_conforms_to_the_schema(name):
         return
     assert tuple(df.columns) == COLUMNS, f"{name} has columns {tuple(df.columns)}"
     assert len(df) > 0
-    if name == "stability_envelope.csv":
-        # M6 records a stability *limit*, not an error sweep: `h` carries the
+    if name in ("stability_envelope.csv", "stability_tier2.csv"):
+        # M6/M12.2 record a stability *limit*, not an error sweep: `h` carries the
         # measurement and err_l2/nfe are nan by design.
         assert df["h"].notna().all(), "the stability envelope has no h values"
     else:
@@ -154,9 +157,13 @@ def test_ledger_and_coverage_are_built_together():
     assert led.exists() and cov.exists(), "the ledger and the coverage table ship together"
 
     d_led = pd.read_csv(led)
-    assert list(d_led.columns) == ["prediction", "verdict", "evidence"]
+    assert list(d_led.columns) == ["prediction", "verdict", "evidence", "source"]
     assert set(d_led["verdict"]) <= {"confirmed", "refuted", "narrowed", "pending"}
     assert d_led["evidence"].str.len().min() > 20, "every verdict needs its number"
+    # Predictions come from two places, each written down before its measurement:
+    # the guide's Part 5 (before M5) and the 2026-09-24 review (before M11/M12).
+    assert set(d_led["source"]) == {"guide Part 5", "review 2026-09-24"}
+    assert (d_led["source"] == "guide Part 5").sum() == 6, "the guide's six predictions"
 
     d_cov = pd.read_csv(cov)
     assert list(d_cov.columns) == ["bucket", "item", "note"]
@@ -186,3 +193,23 @@ def test_milestone_figures_are_committed():
         "08_crossover.png",
     ]:
         assert (FIGURES / f).exists(), f"figures/{f} missing"
+
+
+def test_m13_tables_if_built():
+    """The M13 tables the report cites: one row per solver, sane values."""
+    path = RESULTS / "matched_protocol_slopes.csv"
+    if not path.exists():
+        pytest.skip("M13 tables not built yet -- run notebooks/10_report.ipynb")
+    m = pd.read_csv(path)
+    assert {"theory", "tier1_asymptotic", "tier2_matched", "tier3_network"} <= set(m.columns)
+    assert m["tier2_matched"].notna().all(), "every matched-protocol fit needs a slope"
+
+    g = pd.read_csv(RESULTS / "reparam_gain.csv")
+    assert set(g["solver"]) == {"euler", "midpoint", "rk4"}
+    assert (g["gain_A_over_B"] > 0).all()
+
+    fv = RESULTS / "tier3_fid_vs_l2.csv"
+    if fv.exists():
+        f = pd.read_csv(fv)
+        assert set(f["budget"]) == {10, 20}
+        assert f["fid"].notna().all() and (f["fid"] > 0).all()
