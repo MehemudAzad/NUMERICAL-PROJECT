@@ -1,22 +1,15 @@
 # Milestones M11–M13 — post-review fixes
 
-**Status (2026-09-25):** M11 and M12 both done; M13 (the report) is owned by a
-teammate, not written here.
-- **Step 0** (notebook 10's title cell) — done.
-- **M12** — done: `notebooks/12_controls.ipynb`, `src/crossover.py`
-  (`crossover_nfe`), `src/stability.py` (`factor`/`ref` kwargs), 4 new tests.
-  All four sub-experiments' numbers land close to this document's own Findings
-  2–6 (independently recomputed, not copied) — see `docs/CLAUDE.md` §6/§11.1.
-- **M11** — done, including the Kaggle run (2026-09-25, 5k FID samples):
-  `src/imaging.py`, `src/tier3.py`'s new kwargs, `notebooks/11_samples_fid.ipynb`,
-  `results/tier3_fid.csv`, `results/tier3_per_image_l2.csv`, `figures/11_*.png`.
-  Decision gate: qualitative match to the paper's Table 6 ranking — proceed.
-  Headline number: at NFE≈10, L2 ranks DPM-1 over DPM-2 (75.7 vs 166.4); FID
-  ranks DPM-2 over DPM-1 by 1.8x (24.9 vs 44.9), same checkpoint, same `x_T`.
-  Full writeup in `docs/CLAUDE.md` §11.1.
-- **M13** — the report (`report/main.tex`) is a teammate's task; not touched
-  here by design. M11 and M12's numbers are ready in `docs/CLAUDE.md` §11.1
-  and the `results/*.csv` files above for whoever picks it up.
+**Status (2026-09-27):** M11, M12 and M13 done.
+- **Step 0**, **M11**, **M12** — done (see `docs/CLAUDE.md` §6 and §11.1).
+- **M13** — done: `notebooks/10_report.ipynb` regenerates the ledger (6 guide + 8
+  review predictions, computed from data) and three new tables;
+  `report/main.tex` is rewritten around the corrected findings and builds
+  (`make -C report tectonic`); `docs/PROJECT_EXPLANATION.md` (viva cheat sheet)
+  matches the report. The FID floor (`notebooks/11b_fid_floor.ipynb`, Kaggle,
+  2026-09-27): real test images follow FID ≈ 3.0×10⁴/N — 5.9 at 5k, 3.15 at 10k (the
+  documented value, so the pipeline is sound). Sample size explains about half of
+  the gap to the paper's absolute FIDs; ledger row R8 is *narrowed*.
 
 **Read first:** `docs/CLAUDE.md` (working agreement, M0–M10 specs). Same rules apply:
 plan approved before code, one milestone at a time, notebooks are the deliverable,

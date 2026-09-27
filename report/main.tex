@@ -2,8 +2,10 @@
 %  CSE-402 Numerical Analysis, Simulation & Modeling -- Section A
 %  Order, cost and stability in diffusion sampling
 %
-%  Build:  latexmk -pdf main.tex        (or: make)
+%  Build:  latexmk -pdf main.tex   (or: make, or: tectonic -X compile main.tex)
 %  Figures are read from ../figures/ -- run ../run_all.sh to regenerate.
+%  Every number in this report is read off results/*.csv; notebooks/10_report.ipynb
+%  computes the ledger verdicts from them.
 % =====================================================================
 \documentclass[11pt,a4paper]{article}
 
@@ -55,26 +57,31 @@ Diffusion image sampling is an initial-value problem: one integrates the
 probability-flow ODE from noise to data, paying one neural-network evaluation
 (\NFE) per stage. Lu et al.\ (\emph{DPM-Solver}, NeurIPS 2022) accelerate this by
 solving the linear half of the ODE exactly, and validate the result with FID --- an
-image-quality score. We instead grade the same solvers by the standards of
-numerical analysis: measured convergence order, stability at the stiff boundary
-$t\!\to\!0$, and error per \NFE. To make error measurable we build three
-testbeds of decreasing reference exactness --- an anisotropic Gaussian with a
-closed-form trajectory, a Gaussian/point mixture referenced against
-\textsc{dop853}, and the real CIFAR-10 DDPM UNet referenced against a fine grid of
-itself --- and three solver arms that separate DPM-Solver's two independent
-ideas.
+image-quality score. We grade the same solvers by the standards of numerical
+analysis --- measured convergence order, stability at the stiff boundary
+$t\!\to\!0$, and error per \NFE\ --- on three testbeds of decreasing reference
+exactness (an anisotropic Gaussian with a closed-form trajectory, a point mixture
+referenced against \textsc{dop853}, and the real CIFAR-10 DDPM network referenced
+against a fine grid of itself), with three solver arms that separate DPM-Solver's
+two ideas.
 
-Our central result concerns \emph{Assumption B.1}, the smoothness hypothesis the
-paper's order theorem rests on. On the two analytic testbeds, which satisfy it
-exactly, every solver in every arm attains its textbook order to within
-$0.094$. On the real network, which has no obligation to satisfy it, order
-collapses --- and collapses \emph{in proportion to the order claimed}: RK4 falls
-from $3.94$ to $1.21$, while explicit Euler falls only from $1.01$ to $0.84$.
-Two further findings: the $\lam$-reparameterisation, worth almost nothing on the
-exact-score tiers, is worth an order of magnitude on the real network; and the
-paper's own \S4.2 instability claim does not reproduce on our stiff Tier-1
-problem, for a reason we identify. We report the predictions we got wrong
-alongside those we got right.
+The order theorem holds where its hypotheses do: on the exact-score testbeds, in
+the asymptotic regime, every solver reaches its textbook order to within $0.094$.
+But at the budgets the method is actually used at (10--120 \NFE, down to
+$t_{\text{end}}=10^{-3}$) no solver is in that regime --- \emph{even with an exact
+score}, measured order misses theory by up to $1.9$, most of the $2.8$ shortfall
+seen on the real network. Explicit steppers in $t$ do destabilise near the data,
+but because of \emph{curvature}, not stiffness: never on the linear testbed at any
+condition number, while on the curved mixture RK4 in $t$ has a real stability
+limit that the $\lam$-reparameterisation removes. The paper's unexplained Table~6
+anomaly --- order~3 worse than order~1 at ${\sim}10$ \NFE\ --- reproduces on the
+paper's own checkpoint: at matched \NFE, DPM-Solver-3 overtakes DPM-Solver-1 at
+$14$ \NFE. Finally, trajectory accuracy and image quality disagree: at 10 \NFE\
+DPM-Solver-2 lands $2.3\times$ further from the converged image than
+DPM-Solver-1 yet scores $1.8\times$ better FID, because it produces a sharp but
+\emph{different} picture. We also identify when DPM-Solver's exact linear
+treatment helps (concentrated data) and when it hurts (spread-out data), and we
+report the predictions we got wrong.
 \end{abstract}
 
 % =====================================================================
@@ -99,23 +106,28 @@ samples in 10--20 \NFE\ where prior samplers needed 100--250.
 The paper proves an order theorem for this scheme and validates it with FID
 scores on generated images. FID is a distributional measure of image quality; it
 is not a measure of how accurately an ODE was integrated. Three quantities a
-numerical analyst would ask for are absent:
+numerical analyst would ask for are therefore measured only indirectly, if at all:
 
 \begin{description}
 \item[Order.] Halving the step size $h$ should reduce the error by $2^{p}$ for a
-$p$th-order method. Nobody measured $p$ against a known-correct trajectory.
+$p$th-order method. The paper proves $p$ but does not measure it against a
+known-correct trajectory.
 \item[Stability.] The ODE stiffens as $t\!\to\!0$ because $\sigma(t)\!\to\!0$.
-\S4.2 of the paper \emph{asserts} that classical explicit methods destabilise
-there and cites the literature; it never measures a stability limit.
+\S4.2 of the paper suggests, citing the exponential-integrator literature, that
+classical explicit methods ``may suffer from unstable numerical issues for large
+step size''; it does not measure a stability limit.
 \item[Cost.] A higher-order method is more accurate per step but calls the
 network more times per step. Whether it wins after dividing out is an empirical
 question.
 \end{description}
 
-This report supplies all three, and in doing so tests a hypothesis the paper
-states but does not check.
+This report supplies all three, and then puts the numerical verdict next to the
+image-quality one. An earlier draft compared measurements taken under different
+settings; a review caught it, and the controls in \S\S4--7 replace those
+comparisons. Where a conclusion changed as a result, the ledger in \S8 says so.
 
 % =====================================================================
+
 \section{Mathematical setting}
 % =====================================================================
 
@@ -249,9 +261,11 @@ responsibilities are computed with \texttt{logsumexp}; a naive
 $\exp$-then-normalise overflows long before the ratios cease to be well defined.
 
 \paragraph{Tier 3 --- the real network.}
-\texttt{google/ddpm-cifar10-32}, $d = 3072$, on a Kaggle T4. The reference is a
+\texttt{google/ddpm-cifar10-32}, $d = 3072$, on a Kaggle T4 --- the same DDPM
+checkpoint as the paper's discrete-time CIFAR-10 experiments. The reference is a
 201-\NFE\ DPM-Solver-3 run of the \emph{same} checkpoint from the \emph{same}
 $x_T$, so what is measured remains discretisation error rather than model error.
+\S7 adds what this metric cannot see: the samples themselves, and their FID.
 
 \begin{figure}[t]
 \centering
@@ -278,23 +292,50 @@ $x_T$, so what is measured remains discretisation error rather than model error.
 \node[lab,anchor=north east] at (10.75,-2.05) {reference \emph{approximate}\\ problem real};
 
 \node[lab,anchor=south,text width=3.6cm] at (0,1.45)
-  {satisfies Assumption B.1\\ \emph{exactly}};
+  {exact score: linear,\\ zero model error};
 \node[lab,anchor=south,text width=3.6cm] at (4.4,1.45)
-  {satisfies Assumption B.1\\ \emph{exactly}};
+  {exact score: curved,\\ zero model error};
 \node[anchor=south,text width=3.6cm,font=\scriptsize\bfseries,warn,align=center] at (8.8,1.45)
-  {no reason to satisfy\\ Assumption B.1};
+  {network score: model error,\\ float32};
 
 \begin{scope}[on background layer]
   \node[fit=(t1)(t2),rounded corners=3pt,fill=armA!6,inner sep=9pt] {};
 \end{scope}
 \end{tikzpicture}
 \caption{The tier ladder. Moving right trades exactness of the reference for
-realism of the problem. The shaded pair have analytic scores, hence continuous
-derivatives to all orders --- they satisfy the order theorem's smoothness
-hypothesis by construction. Tier 3 does not, which is what makes the comparison
-a test rather than a demonstration.}
+realism of the problem. The shaded pair have analytic scores, so any shortfall
+from theory there is a property of the solver and the budget, not of a model.}
 \label{fig:tiers}
 \end{figure}
+
+\subsection{Two protocols}
+
+A convergence study depends on \emph{where} and \emph{at what budget} it is run,
+and this report uses two settings deliberately (Table~\ref{tab:protocols}).
+
+\begin{table}[h]
+\centering
+\caption{The two measurement protocols. Every cross-tier comparison in this
+report uses the practitioner protocol.}
+\label{tab:protocols}
+\small
+\begin{tabular}{lp{3.4cm}p{3.3cm}p{5.2cm}}
+\toprule
+Protocol & Interval & Budget & Purpose \\
+\midrule
+asymptotic   & $t\in[0.2,\,1]$         & $\ge 16$--$64$ \NFE, per solver past its pre-asymptotic region & test the order theorem cleanly (Tiers 1--2, \S4.1) \\
+practitioner & $t\in[10^{-3},\,1]$ (the paper's $\epsilon$) & 9--120 \NFE & what a user runs; Tier 3's only setting, and the one Tiers 1--2 are re-run at to be compared with it \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The asymptotic protocol avoids the region near the data, where the problem is
+hardest, and starts each sweep past the solver's pre-asymptotic regime --- the
+right conditions for checking that an implementation has the order the theorem
+promises. The practitioner protocol is Tier~3's: a network is expensive, and
+nobody samples it at 500 \NFE. An earlier draft of this report compared Tier-1/2
+slopes from the first protocol with Tier-3 slopes from the second, and attributed
+the difference to the network; \S5.2 corrects that.
 
 \subsection{Conventions}
 
@@ -342,21 +383,27 @@ model error rather than a reimplementation of it.
 \section{Results on the analytic tiers}
 % =====================================================================
 
-\subsection{Order}
+\subsection{Order, in the asymptotic regime}
 
-Table~\ref{tab:order12} gives the measured slopes. Every solver in every arm
-attains its theoretical order: the worst deviation is $0.094$ on Tier 1 and
-$0.084$ on Tier 2, with mean $R^2$ of $0.99992$ and $0.99996$. Introducing
-genuine curvature (Tier 2) shifts no slope by more than $0.059$.
+Table~\ref{tab:order12} gives the measured slopes under the asymptotic protocol.
+Every solver in every arm attains its theoretical order: the worst deviation is
+$0.094$ on Tier 1 and $0.084$ on Tier 2, with mean $R^2$ of $0.99992$ and
+$0.99996$. Introducing genuine curvature (Tier 2) shifts no slope by more than
+$0.059$.
 
-This is the control experiment. Both tiers have analytic scores, so Assumption
-B.1 holds exactly, and the order theorem's conclusion holds exactly with it.
+This is the control experiment. Both tiers have analytic scores, so the
+smoothness hypothesis behind the paper's order theorem (its Assumption B.1:
+the $\lam$-derivatives of $\eps$ exist and are continuous) holds, and the
+theorem's conclusion holds with it. It also confirms that the published solver
+code, driven by an exact oracle, is correct.
 
 \begin{table}[t]
 \centering
-\caption{Measured convergence order on the two exact-score testbeds. Slopes are
-log--log fits of $\lVert x_N - x_{\text{ref}}\rVert_2$ against $h$ over the
-automatically selected asymptotic window.}
+\caption{Measured convergence order on the two exact-score testbeds, asymptotic
+protocol ($t_{\text{end}} = 0.2$). Slopes are log--log fits of
+$\lVert x_N - x_{\text{ref}}\rVert_2$ against $h$ over the automatically
+selected asymptotic window. \S5.2 repeats the measurement under the practitioner
+protocol.}
 \label{tab:order12}
 \small
 \begin{tabular}{llcccc}
@@ -383,74 +430,107 @@ C & dpm3      & 3 & 3.094 & 3.084 & 0.094 \\
 \end{tabular}
 \end{table}
 
-\subsection{Stability: a claim that does not reproduce}
+\subsection{Stability: absent on the linear problem, real on the curved one}
 
-Section 4.2 of the paper asserts that explicit methods on this semi-linear ODE
-destabilise at large steps near $t\!\to\!0$. We measured it directly, bisecting
-on step count for the coarsest grid that remains bounded, across
-$\kappa\in\{1,10,10^2,10^3,10^4\}$ and all five steppers in both arms.
+Section 4.2 of the paper suggests that explicit methods on this semi-linear ODE
+destabilise at large steps near $t\!\to\!0$. We measured it directly, bisecting on
+step count for the coarsest grid that stays bounded, for all five steppers in
+arms A and B, on both analytic tiers down to $t_{\text{end}} = 10^{-3}$.
 
-\textbf{The stability map is exactly flat.} Arm A reports the coarsest grid tried
-($h \approx 0.4995$) as already stable for every $\kappa$ and every stepper;
-arm B likewise at $h \approx 4.7913$. The variation across five decades of
-$\kappa$ is identically zero. Stress-testing to $\kappa = 10^{8}$ and
-$t_{\text{end}} = 10^{-6}$ changed nothing.
+\paragraph{Tier 1: no instability at any $\kappa$.} Across
+$\kappa\in\{1,10,10^2,10^3,10^4\}$, every stepper in both arms is already stable on
+the coarsest grid tried (2 steps: $h \approx 0.4995$ in $t$, $4.79$ in $\lam$), so
+the bisection never engages; stress-testing to $\kappa = 10^{8}$ and
+$t_{\text{end}} = 10^{-6}$ changes nothing. (The bisection itself is verified
+against a synthetic linear ODE with a closed-form instability threshold.) The
+reason is structural. On a uniform-$t$ grid the node nearest the boundary sits at
+$t_{\text{end}}+h$, and the stability product $h\cdot J(t_{\text{end}}+h)$, with $J$
+the local Jacobian, never exceeds ${\approx}\,0.9$ for any $h$ or $\kappa$ ---
+under explicit Euler's threshold of 2 --- because $\sigma(t)^2 \sim \beta_0 t$ near
+the boundary makes the growing stiffness and the grid's shrinking distance to
+$t_{\text{end}}$ very nearly cancel. The stiffness knob $\kappa$ cannot defeat this:
+for $s_{\min}\ll\sigma^2$ the local rate is capped by $\sigma(t)^2$, not by
+$s_{\min}$.
 
-This is not a bug --- the bisection is verified separately against a synthetic
-linear ODE with a closed-form instability threshold. It is structural. On a
-uniform-$t$ grid the node nearest the boundary sits at $t_{\text{end}}+h$, and the
-exact stability product $h\cdot J(t_{\text{end}}+h)$, with $J$ the local
-Jacobian, never exceeds ${\approx}\,0.9$ for any $h$ or $\kappa$ --- comfortably
-under explicit Euler's threshold of 2 --- because $\sigma(t)^2 \sim \beta_0 t$
-near the boundary makes the growing local stiffness and the grid's shrinking
-distance to $t_{\text{end}}$ very nearly cancel.
+\paragraph{Tier 2: a real limit, and only in $t$.} The curved mixture behaves
+differently (Figure~\ref{fig:stab2}). Its Jacobian grows without that cancellation:
+between modes the posterior weights switch ever more sharply as $\sigma\to0$, and
+at $t = 10^{-3}$ the spectral norm of $\partial(\text{rhs}_t)/\partial x$ is 545,
+against 0.54 on Tier 1 --- three orders of magnitude. Arm-A RK4 now has a genuine
+stability limit, $h_{\max} = 0.1998$: stable from 5 steps, divergent at 2--4. A
+stricter divergence rule (twice the data scale instead of ten times
+$\lVert x_T\rVert$) gives the same limit. The other arm-A steppers stay stable at the
+coarsest grid, and the reason is where they sample: RK4 is the only one whose
+final stage evaluates the right-hand side at the \emph{end} of the step --- on the
+last step, at $t_{\text{end}}$ itself, where the Jacobian peaks. In arm B every
+stepper is stable at every grid tried.
 
-We therefore \emph{narrow} rather than confirm the paper's \S4.2 claim: it does
-not manifest on a linear, decoupled problem under this metric. It may still hold
-under a different stability definition or on a problem where the cancellation has
-no reason to occur.
+So the paper's \S4.2 claim is \emph{narrowed}, not refuted: explicit steppers in
+$t$ do destabilise near the data, but the cause is curvature of the data
+distribution, not the stiffness parameter the claim --- and our original
+prediction --- points to; and the $\lam$-reparameterisation removes it.
 
-\subsection{The crossover}
-
-Table 6 of the base paper reports, without explanation, that DPM-Solver-3 is
-dramatically \emph{worse} than DPM-Solver-1 at ${\sim}10$ \NFE\ on CIFAR-10
-(FID 18.37 versus 11.83 at $\epsilon = 10^{-3}$). This is textbook
-pre-asymptotic behaviour: at large $h$ the cubic Taylor correction is not yet
-valid and actively hurts. With exact answers and a continuously sweepable $h$ we
-can locate the crossing precisely, comparing the two orders at \emph{matched
-$h$} (a shared macro-step count, so both share the step size and differ only in
-\NFE\ cost).
-
-\begin{table}[h]
+\begin{figure}[t]
 \centering
-\caption{Crossover step size $h^\star$ and the corresponding DPM-Solver-3 budget,
-at $t_{\text{end}} = 10^{-3}$ (the paper's own $\epsilon$).}
-\label{tab:crossover}
-\small
-\begin{tabular}{llcc}
-\toprule
-Testbed & $\kappa$ & $h^\star$ & $\NFE_3^\star$ \\
-\midrule
-Tier 1, Gaussian & $1$      & 6.497 & 4.43 \\
-Tier 1, Gaussian & $10$     & 6.157 & 4.67 \\
-Tier 1, Gaussian & $10^{2}$ & 5.795 & 4.96 \\
-Tier 1, Gaussian & $10^{3}$ & 6.131 & 4.69 \\
-Tier 1, Gaussian & $10^{4}$ & 6.228 & 4.62 \\
-\midrule
-Tier 2, \texttt{mog8} & --- & 3.219 & 8.93 \\
-\bottomrule
-\end{tabular}
-\end{table}
+\includegraphics[width=\textwidth]{12_stability_tier2.png}
+\caption{Stability on the curved Tier 2 (M12.2). Left: largest stable step for
+each stepper, arms A and B (a bar at 0.4995 in $t$ or 4.79 in $\lam$ means
+``stable at the coarsest grid tried''). Middle: spectral norm of the arm-A
+Jacobian along the trajectory; the linear Tier 1 turns \emph{down} near $t\to0$,
+the curved Tier 2 climbs to 545. Right: the arm-A limits under the default and a
+stricter divergence rule --- identical.}
+\label{fig:stab2}
+\end{figure}
 
-The crossover is real and reproducible, and $\NFE_3^\star$ is \emph{flat across
-five decades of stiffness} --- echoing the stability finding. Curvature, not
-stiffness, moves it: Tier 2 crosses at $8.93$, roughly double Tier 1 and much
-closer to the paper's observed 10--12. Neither analytic tier reaches that value,
-and both still have an exact score. The residual gap is therefore attributable to
-the two ingredients they lack --- network approximation error and much higher
-intrinsic dimension --- which is precisely what Tier 3 supplies.
+\subsection{When does the exact linear treatment help?}
 
-% =====================================================================
+DPM-Solver's premise is that integrating the linear term exactly and
+approximating only $\eps$ is always the better split. Under the practitioner
+protocol the two analytic tiers disagree about that:
+
+\begin{itemize}
+\item On Tier~1 ($\kappa = 10$), DPM-Solver-1 and -2 lose to the classical stepper
+of the same order, in either coordinate, at every budget from 10 to 120 \NFE: at
+20 \NFE, DPM-Solver-2 errs by $0.133$, RK2 in $t$ by $0.034$, RK2 in $\lam$ by
+$0.0089$; at 10 \NFE, DPM-Solver-1 errs by $0.425$ against Euler-in-$t$'s $0.092$.
+DPM-Solver-3 loses to RK4 in $\lam$ throughout, and beats RK4 in $t$ only above
+${\sim}23$ \NFE.
+\item On Tier~2 it wins where the paper says it should: at 12 \NFE, DPM-Solver-2
+errs by $0.084$ against $0.23$ (RK2 in $\lam$) and $0.34$ (RK2 in $t$), and
+DPM-Solver-3 by $0.049$ against $0.30$ (RK4 in $\lam$) and $14.8$ (RK4 in $t$: 3 steps,
+past its 5-step stability limit, \S4.2).
+\end{itemize}
+
+The difference is how \emph{concentrated} the data is, and it has a two-line
+explanation. DPM-Solver's local error is driven by how much $\eps$ varies along
+the trajectory in $\lam$; a classical stepper's is driven by the whole right-hand
+side. For data concentrated at a point ($s\to0$), $\eps = x/\sigma$ and the exact
+flow is $x\propto\sigma$, so $\eps$ is \emph{constant} along the path and
+DPM-Solver-1 is exact; substituting $e^{h} = (\alpha_i\sigma_{i-1})/(\sigma_i\alpha_{i-1})$
+into Eq.~\eqref{eq:armC} gives $x_i = (\sigma_i/\sigma_{i-1})\,x_{i-1}$ identically.
+For data as spread out as the noise ($s = 1$), $v\equiv1$, the whole right-hand side
+of Eq.~\eqref{eq:armA} vanishes and every classical stepper is exact, while
+$\eps = \hat\sigma(\lam)\,x$ still varies from 1 to 0 across the trajectory and
+DPM-Solver-1 is not. Figure~\ref{fig:split} sweeps $s$ between the two: at 20 \NFE,
+for $s < 10^{-2}$ DPM-Solver-1 beats Euler-in-$t$ at 83\% of points and
+DPM-Solver-2 beats RK2-in-$t$ at all of them; at $s = 1$ the classical steppers are
+exact to $10^{-16}$ while DPM-Solver-1 errs by $5.9\times10^{-3}$. Tier~1's
+eigenvalues run up to $s = 1$; Tier~2 is a set of point masses. Natural images, whose
+pixel-space covariance spectrum decays rapidly, put most of their directions at the
+concentrated end, which is consistent with DPM-Solver's success on them --- though
+we have not measured that spectrum here.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{12_split_benefit.png}
+\caption{When the split helps (M12.4). Error on one Gaussian coordinate of data
+variance $s$, at 10, 20 and 50 \NFE. Solid: DPM-Solver-1 (blue) and -2 (red);
+dashed/dotted: the same order in $t$ and in $\lam$. At small $s$ DPM-Solver is
+ahead; at $s = 1$ the classical right-hand side cancels exactly and they drop to
+machine precision.}
+\label{fig:split}
+\end{figure}
+
 \section{Tier 3: the order theorem meets a real network}
 \label{sec:tier3}
 % =====================================================================
@@ -483,113 +563,125 @@ the same ODE. Arms A and B therefore agree by construction; we verify it end to
 end, integrating both at four resolutions and watching the gap fall from
 $2.5\times10^{-4}$ to $3.9\times10^{-7}$.
 
-\subsection{Order collapses in proportion to the order claimed}
+\subsection{Measured order at practitioner budgets}
 
-Table~\ref{tab:order3} is the central result of this report.
+Table~\ref{tab:order3} puts the network's slopes next to the analytic tiers' ---
+now under \emph{both} protocols, so that like is compared with like.
 
 \begin{table}[t]
 \centering
-\caption{Measured order against a real network, beside the exact-score tiers.
-``Floor-excl.'' refits after discarding sweep points within $3\times$ the
-measured reference floor, as the base paper's own guidance requires (``do not
-fit slopes through the flat part''); ``drop'' is how many of the eight points
-that removes. Only the three curves that actually reach the floor are affected.
-Produced by \texttt{notebooks/10\_report.ipynb} into
-\texttt{results/master\_order\_table.csv}.}
+\caption{Measured order under the asymptotic protocol (Tiers 1--2 only) and the
+practitioner protocol (all three tiers). ``Floor-excl.'' refits Tier 3 after
+discarding sweep points within $3\times$ the measured reference floor (the guide's
+``do not fit slopes through the flat part''). From
+\texttt{results/matched\_protocol\_slopes.csv}.}
 \label{tab:order3}
 \small
-\begin{tabular}{llccccrc}
+\begin{tabular}{llc cc ccc c}
 \toprule
-Arm & Solver & Theory $p$ & Tier 1 & Tier 2 & Tier 3 & Floor-excl. & drop \\
+ & & & \multicolumn{2}{c}{asymptotic} & \multicolumn{4}{c}{practitioner ($t_{\text{end}}=10^{-3}$, 9--120 \NFE)} \\
+\cmidrule(lr){4-5}\cmidrule(lr){6-9}
+Arm & Solver & $p$ & Tier 1 & Tier 2 & Tier 1 & Tier 2 & Tier 3 & floor-excl. \\
 \midrule
-A & euler    & 1 & 1.012 & 1.012 & \textbf{0.842} & 0.842 & 0 \\
-A & midpoint & 2 & 2.028 & 2.031 & \textbf{1.525} & 1.500 & 1 \\
-A & rk4      & 4 & 3.938 & 3.997 & \textbf{1.210} & 1.210 & 0 \\
+A & euler    & 1 & 1.012 & 1.012 & 0.871 & 1.269 & 0.842 & 0.842 \\
+A & midpoint & 2 & 2.028 & 2.031 & 2.403 & 1.485 & 1.525 & 1.500 \\
+A & rk4      & 4 & 3.938 & 3.997 & 3.297 & 2.093 & 1.210 & 1.210 \\
 \midrule
-B & euler    & 1 & 1.023 & 1.023 & \textbf{0.746} & 0.746 & 0 \\
-B & midpoint & 2 & 2.057 & 2.055 & \textbf{1.603} & 1.603 & 0 \\
-B & rk4      & 4 & 3.921 & 3.965 & \textbf{2.231} & $1.099^{\dagger}$ & 2 \\
+B & euler    & 1 & 1.023 & 1.023 & 1.073 & 1.191 & 0.746 & 0.746 \\
+B & midpoint & 2 & 2.057 & 2.055 & 1.786 & 2.385 & 1.603 & 1.603 \\
+B & rk4      & 4 & 3.921 & 3.965 & 4.829 & 4.523 & 2.231 & $1.099^{\dagger}$ \\
 \midrule
-C & dpm1     & 1 & 0.994 & 0.996 & \textbf{0.813} & 0.813 & 0 \\
-C & dpm2     & 2 & 2.028 & 2.018 & \textbf{2.191} & 2.244 & 1 \\
-C & dpm3     & 3 & 3.094 & 3.084 & \textbf{2.473} & \textbf{2.995} & 1 \\
+C & dpm1     & 1 & 0.994 & 0.996 & 0.958 & 1.325 & 0.813 & 0.813 \\
+C & dpm2     & 2 & 2.028 & 2.018 & 2.100 & 2.455 & 2.191 & 2.244 \\
+C & dpm3     & 3 & 3.094 & 3.084 & 3.492 & 4.214 & 2.473 & \textbf{2.995} \\
+\midrule
+\multicolumn{3}{l}{worst $|\text{slope}-p|$} & 0.094 & 0.084 & 0.83 & 1.91 & 2.79 & \\
 \bottomrule
 \end{tabular}
 
 \vspace{2pt}
 {\footnotesize $^{\dagger}$ \texttt{B/rk4} loses two of eight points to the
-floor, leaving six that lie mostly in its pre-asymptotic region. Neither number
-should be trusted for that row: at these budgets it has no clean asymptotic
-window at all, which is itself the finding.}
+floor, leaving six that lie mostly in its pre-asymptotic region; neither Tier-3
+number should be trusted for that row.}
 \end{table}
 
-The worst deviation from theory goes $0.094$ (Tier 1) $\to$ $0.084$ (Tier 2)
-$\to$ $2.790$ (Tier 3): a factor of thirty-three. Eight of nine fits sit more
-than $0.15$ below theory.
+\paragraph{Most of the shortfall is the budget, not the network.} Read across a
+row. In the asymptotic regime the exact-score slopes sit on theory. Under the
+practitioner protocol the \emph{same exact-score problems} scatter on both sides of
+theory by up to $1.9$ --- RK4 in $t$ on Tier 2 measures $2.09$, RK4 in $\lam$ $4.52$.
+Nothing about the score changed; only the interval and the budget did. At 9--120
+\NFE, reaching down to $t_{\text{end}}=10^{-3}$, no solver is in the asymptotic
+regime its order refers to, whether or not a network is involved. The exact-score
+Tier 2 already shows $68\%$ of the worst gap the network shows ($1.91$ of $2.79$).
 
-The \emph{structure} of the loss is what makes this a test of Assumption B.1
-rather than a generic complaint about neural networks. The assumption requires
-the model's derivatives with respect to $\lam$ to exist and be continuous up to
-order $k+1$. A $p$th-order scheme leans on derivatives up to order $p$; if those
-derivatives are not there, the higher-order scheme has more to lose. That is
-exactly the observed pattern:
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-  width=11.4cm, height=5.4cm,
-  ybar, bar width=9pt,
-  ymin=0, ymax=5.15,
-  ylabel={measured slope}, ylabel style={font=\small},
-  symbolic x coords={A/euler,A/midpt,A/rk4,B/euler,B/midpt,B/rk4,dpm1,dpm2,dpm3},
-  xtick=data, x tick label style={font=\scriptsize,rotate=32,anchor=east},
-  ytick={0,1,2,3,4}, tick label style={font=\scriptsize},
-  legend style={font=\scriptsize,at={(0.02,0.97)},anchor=north west,draw=none,fill=white,fill opacity=.85,text opacity=1},
-  legend columns=3,
-  major grid style={soft!30}, ymajorgrids,
-  enlarge x limits=0.06,
-]
-\addplot[fill=soft!35,draw=soft] coordinates
- {(A/euler,1)(A/midpt,2)(A/rk4,4)(B/euler,1)(B/midpt,2)(B/rk4,4)(dpm1,1)(dpm2,2)(dpm3,3)};
-\addplot[fill=armA!55,draw=armA] coordinates
- {(A/euler,1.012)(A/midpt,2.028)(A/rk4,3.938)(B/euler,1.023)(B/midpt,2.057)(B/rk4,3.921)(dpm1,0.994)(dpm2,2.028)(dpm3,3.094)};
-\addplot[fill=warn!65,draw=warn] coordinates
- {(A/euler,0.842)(A/midpt,1.525)(A/rk4,1.210)(B/euler,0.746)(B/midpt,1.603)(B/rk4,2.231)(dpm1,0.813)(dpm2,2.191)(dpm3,2.473)};
-\legend{theory, Tier 1 (exact score), Tier 3 (real network)}
-\end{axis}
-\end{tikzpicture}
-\end{center}
+\paragraph{What the network adds.} Tier 3's slopes are all \emph{below} theory,
+and the high-order steppers lose most against the matched Tier-2 control: A/rk4
+$2.09\to1.21$, B/rk4 $4.52\to2.23$, dpm3 $4.21\to2.47$. That downward shift is the
+network's own contribution --- smaller than an asymptotic-vs-practitioner comparison
+suggests, and not uniform. The one clear exception is DPM-Solver-3: discarding the
+single sweep point that reaches the reference floor restores $2.995$, essentially
+its textbook order. The automatic window search would have missed that --- it
+prefers a wider window and fits straight through a flat tail unless told where the
+floor is --- and curves far from the floor (A/rk4 at $12\times$ it, B/euler at
+$42\times$) lose nothing to the exclusion.
 
-RK4 in arm A sheds $2.79$ of its four claimed orders; explicit Euler sheds
-$0.16$ of its one. The methods that assumed the most smoothness lost the most
-when it was absent. (The bars show the primary Tier-3 column; \texttt{dpm3}
-reads $2.995$ once its one floor-bound point is excluded, as discussed below.)
+\paragraph{On Assumption B.1.} An earlier draft attributed the Tier-3 shortfall to
+the network violating the order theorem's smoothness hypothesis. That is hard to
+defend: B.1 asks only that the $\lam$-derivatives of $\eps$ \emph{exist and be
+continuous}, and a UNet with SiLU activations, normalisation and sinusoidal time
+embeddings is a smooth function of its inputs. What a network can do is make those
+derivatives \emph{large}, which pushes the start of the asymptotic regime to
+smaller step sizes than any practical budget reaches. The theorem is about
+$h\to0$; at 10--120 \NFE\ it is simply not the operative description, on any tier.
 
-Two qualifications keep this honest. First, \texttt{dpm3} is the striking
-exception once the floor is handled properly: discarding the single point that
-reaches it restores $2.995$, essentially its textbook order. DPM-Solver-3 is the
-one scheme here that \emph{holds} its order against a real network --- a result
-favourable to the base paper, and one we would have missed by trusting the
-automatic window search, which prefers a wider window and will fit straight
-through a flat tail unless told where the floor is. Note the asymmetry that makes
-this a real effect rather than a fitting artefact: the curves \emph{far} from the
-floor (\texttt{A/rk4} at $12\times$ it, \texttt{B/euler} at $42\times$) lose
-nothing to the exclusion and still measure far below theory. The order collapse
-and the floor are independent phenomena. Second, the Tier-3 sweep spans 10--120 \NFE, which for
-the higher-order arm-A/B methods is partly pre-asymptotic by construction; that
-band is the practically interesting one, but it is not a clean asymptotic
-measurement, and the low slopes should be read as ``what you actually get at
-practitioner budgets'', not as a refutation of the theorem's algebra.
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.84\textwidth]{12_matched_protocol.png}
+\caption{Measured slopes against theory (stars): Tier 1 under the asymptotic
+protocol, Tiers 1 and 2 under the practitioner protocol, and Tier 3. The large
+departures already appear with an exact score once the protocol matches Tier 3's.}
+\label{fig:matched}
+\end{figure}
 
-\subsection{The reparameterisation finally earns its keep}
+\subsection{What the $\lam$-reparameterisation buys}
 
-On the analytic tiers arms A and B are nearly indistinguishable --- their slopes
-differ by hundredths. Against a real network they separate sharply. Arm A's RK4
-measures $1.21$ and bottoms out at an error of $4.57$; arm B's measures $2.23$
-and reaches $0.43$ --- \textbf{ten times better at the same budget}
-(Figure~\ref{fig:t3nfe}). The $\lam$-reparameterisation, worth almost nothing
-when the score is exact, is worth an order of magnitude when it is not. This is
-the A-versus-B comparison the three-arm design exists to make, and it only
-becomes visible at Tier 3.
+Arm A and arm B integrate the same ODE; they differ only in the time variable that
+is discretised uniformly. Table~\ref{tab:reparam} gives the error of arm A over arm
+B at the largest budget both reach, so a value above 1 means the $\lam$ form is
+better.
+
+\begin{table}[h]
+\centering
+\caption{Error of arm A divided by error of arm B at the largest shared \NFE\
+(\texttt{results/reparam\_gain.csv}). Above 1: the $\lam$-uniform grid is more
+accurate.}
+\label{tab:reparam}
+\small
+\begin{tabular}{llccc}
+\toprule
+Protocol & Tier & Euler & RK2 & RK4 \\
+\midrule
+asymptotic ($t_{\text{end}}=0.2$)      & 1 & 0.93 & 0.32 & 0.47 \\
+                                       & 2 & 0.92 & 0.39 & 1.77 \\
+\midrule
+practitioner ($t_{\text{end}}=10^{-3}$) & 1 & 0.69 & 0.85 & \textbf{48.4} \\
+                                       & 2 & 9.92 & 33.1 & \textbf{8551} \\
+                                       & 3 & 0.63 & 0.56 & \textbf{10.6} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For RK4 the reparameterisation pays off on \emph{every} tier once the interval
+reaches the data end --- by $48\times$, $8551\times$ and $10.6\times$ --- and not only
+on the network, as an earlier draft concluded from the asymptotic protocol, where it
+is worth $0.47\times$ and $1.77\times$. A $\lam$-uniform grid places its nodes where
+the problem stiffens (Figure~\ref{fig:arms}); a uniform-$t$ grid leaves one long last
+step across the region where $\sigma\to0$. For the low-order steppers the picture is
+mixed: on the curved Tier 2 the $\lam$ form helps by $10$--$33\times$, while on
+Tier 1 and on the network it is slightly worse ($0.56$--$0.85\times$). The
+reparameterisation matters most for exactly the steppers most exposed to the stiff
+end --- the high-order ones, whose stages sample it --- which is the same mechanism
+behind RK4's stability limit in \S4.2.
 
 \begin{figure}[t]
 \centering
@@ -653,40 +745,195 @@ end-to-end accuracy.}
 \end{figure}
 
 % =====================================================================
-\section{The ledger}
+\section{The crossover: when does order 3 beat order 1?}
+\label{sec:crossover}
 % =====================================================================
 
-We wrote six predictions down before measuring. Reporting the misses is more
-useful than reporting only the hits.
+Table 6 of the base paper reports, without explanation, that on this very
+checkpoint (CIFAR-10 DDPM, discrete-time, $\epsilon = 10^{-3}$) DPM-Solver-3 is
+far \emph{worse} than DPM-Solver-1 at 10 \NFE\ --- FID 24.37 (at an actual 9
+\NFE) against 16.69 --- and far better by 12 \NFE\ (8.20 against 13.63). This is
+the textbook pre-asymptotic picture: at large $h$ the cubic Taylor correction is
+not yet valid and actively hurts. With exact answers and a continuously sweepable
+budget, the crossing can be located rather than guessed at.
+
+It matters \emph{what} is held fixed. Comparing the two orders at the same step
+size (M8) gives DPM-Solver-3 three times the budget; the crossing there sits at
+$\NFE_3^\star \approx 4.4$--$5.0$ on Tier 1, flat across five decades of $\kappa$, and
+$8.9$ on Tier 2. The paper's comparison --- and the practical question --- holds the
+\emph{budget} fixed, so Table~\ref{tab:crossnfe} compares at matched \NFE\ (M12.3).
 
 \begin{table}[h]
 \centering
-\caption{Predictions and outcomes. Every verdict is computed from the results
-CSVs by \texttt{notebooks/10\_report.ipynb}, not asserted by hand.}
-\label{tab:ledger}
+\caption{\NFE\ at which the DPM-Solver-3 and DPM-Solver-1 error curves cross, at
+matched \NFE, practitioner protocol (\texttt{results/crossover\_matched\_nfe.csv}).
+Below the crossing order 1 is ahead; above it, order 3.}
+\label{tab:crossnfe}
 \small
-\begin{tabular}{@{}p{7.15cm}lp{5.95cm}@{}}
+\begin{tabular}{lll}
 \toprule
-Prediction & Verdict & Evidence \\
+Testbed & Crossings (\NFE) & Reading \\
 \midrule
-Tiers 1--2 slopes match theory within $\pm0.15$ & \textbf{confirmed} &
-worst $|\Delta| = 0.094$ over 28 fits; mean $R^2 = 0.99994$ \\[3pt]
-Arm A degrades as $\kappa$ grows; arms B/C do not & \textbf{refuted} &
-$h_{\max}$ flat for every arm and stepper; variation across $\kappa\in[1,10^4]$
-is exactly $0$ \\[3pt]
-Euler-$\lam$ and DPM-Solver-1 are both first order but not identical &
-\textbf{confirmed} & slopes $1.02$ vs $0.99$; errors differ by $1.4\times$ at
-matched \NFE \\[3pt]
-RK4 wins per step, loses per \NFE, to DPM-Solver-3 & \textbf{narrowed} &
-holds on Tier 3 for \NFE\ 16--120; fails on Tiers 1--2, whose sweeps sit deep in
-the asymptotic regime where $h^4$ dominates \\[3pt]
-Tier-3 slopes come out lower than theory and flatten early & \textbf{confirmed} &
-8 of 9 fits $>0.15$ below theory; worst gap $-2.79$ \\[3pt]
-Arm B at low \NFE\ may be worse than arm A & \textbf{confirmed} &
-observed on all three tiers at the coarsest shared budget \\
+Tier 1, Gaussian      & 5.1              & one crossing \\
+Tier 2, \texttt{mog8} & 9.2, 14.2, 17.3  & re-crosses; order 3 settled ahead from 17.3 \\
+Tier 3, CIFAR-10      & \textbf{14.1}    & one crossing --- the paper's own checkpoint \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+On the real network the crossing falls at $14$ \NFE: Table 6's anomaly,
+reproduced on the paper's checkpoint with a trajectory-error metric rather than
+FID. The first crossings rise with the difficulty of the problem --- $5.1$ for the
+linear Gaussian, $9.2$ for the curved mixture, $14.1$ for the network --- which is
+what the pre-asymptotic reading predicts: the rougher $\eps$ is along the path, the
+larger its higher $\lam$-derivatives, and the smaller the step must be before the
+extra Taylor terms help rather than hurt. Our own FIDs (\S7) tell the same story:
+DPM-Solver-3 scores 143 at 9 \NFE\ against DPM-Solver-1's 44.9 at 10, and 18.7 at 18
+against 27.0 at 20. Figure~\ref{fig:crossnfe} shows the curves.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.80\textwidth]{12_crossover_matched_nfe.png}
+\caption{DPM-Solver-3 (solid) against DPM-Solver-1 (dashed) at matched \NFE, each
+tier normalised by its own DPM-Solver-1 maximum; dotted verticals mark the
+crossings.}
+\label{fig:crossnfe}
+\end{figure}
+
+% =====================================================================
+\section{What the samples look like, and how FID ranks them}
+\label{sec:samples}
+% =====================================================================
+
+Everything so far measures how far a sampler's endpoint lands from the converged
+ODE solution. The paper instead measures whether the images look right, with FID.
+M11 did both on the same checkpoint: it rendered samples from every sampler at every
+budget (Figure~\ref{fig:grid}), and scored six samplers with FID on 5,000 samples
+each at $\sim$10 and $\sim$20 \NFE, next to the L2 distance of the same samplers on a
+64-image batch (Table~\ref{tab:fid}). Two samplers the earlier milestones had not
+run are included because the paper itself uses them: \emph{DPM-Solver-fast}, which
+mixes orders 1--3 to spend the budget exactly and is the paper's sampler at
+$\le 20$ \NFE, and DDIM on its customary quadratic time grid.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{11_samples_grid.png}
+\caption{One starting noise, six samplers, five budgets, and the 201-\NFE\
+reference (right). ``gl'' is the mean absolute difference from the reference in
+8-bit gray levels. At 10 \NFE: DDIM and DPM-Solver-1 give the right picture,
+blurred; RK2 in $t$ the right picture with residual noise; DPM-Solver-2 a sharp but
+\emph{different} picture; DPM-Solver-fast an incomplete one; DPM-Solver-3 static.
+By 20 \NFE\ every sampler has converged to the reference visually.}
+\label{fig:grid}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Sample quality and trajectory accuracy on the same checkpoint. FID on
+5,000 samples (clean-fid, CIFAR-10 training statistics); the paper's FID for the
+same sampler (Table 6, DDPM discrete, $\epsilon=10^{-3}$; DDIM from Table 4, 50,000
+samples); L2 distance to the converged image over 64 images, and its per-image RMS
+in gray levels (median). Sorted by our FID within each budget. From
+\texttt{results/tier3\_fid\_vs\_l2.csv}.}
+\label{tab:fid}
+\small
+\begin{tabular}{llrrrr}
+\toprule
+Budget & Sampler (\NFE) & FID-5k & paper FID & L2 (64 img) & RMS gray \\
+\midrule
+$\sim$10 & DPM-Solver-2 (10)     & \textbf{24.9} & 7.90  & 180.6 & 49.3 \\
+         & DPM-Solver-fast (10)  & 31.3 & \textbf{6.42}  & 111.7 & 30.2 \\
+         & DDIM, quadratic (10)  & 39.5 & 13.58 & 91.9  & 25.8 \\
+         & DPM-Solver-1 (10)     & 44.9 & 16.69 & 78.4  & 21.9 \\
+         & RK2 in $t$ (10)       & 52.9 & ---   & \textbf{44.4}  & 11.3 \\
+         & DPM-Solver-3 (9)      & 143.3 & 24.37 & 287.0 & 82.5 \\
+\midrule
+$\sim$20 & DPM-Solver-2 (20)     & \textbf{15.6} & \textbf{5.24}  & 27.3  & 7.1 \\
+         & RK2 in $t$ (20)       & 15.7 & ---   & \textbf{15.6}  & 3.7 \\
+         & DPM-Solver-fast (20)  & 18.0 & 5.52  & 18.7  & 4.1 \\
+         & DPM-Solver-3 (18)     & 18.7 & 5.43  & 26.4  & 6.4 \\
+         & DDIM, quadratic (20)  & 25.1 & 6.94  & 49.8  & 13.9 \\
+         & DPM-Solver-1 (20)     & 27.0 & 8.90  & 46.3  & 12.2 \\
+\midrule
+converged & DPM-Solver-3 (99)    & 16.5 & ${\sim}5.25$ & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Our FID ranking matches the paper's.} At $\sim$10 \NFE\ the paper's three
+headline comparisons all hold on our run: DPM-Solver-2 beats DPM-Solver-1 ($24.9$ vs
+$44.9$), DPM-Solver-3 loses to DPM-Solver-1 ($143$ vs $44.9$), and DPM-Solver-fast
+beats DDIM ($31.3$ vs $39.5$). Only the top pair swaps order, DPM-Solver-2 edging
+DPM-Solver-fast where the paper has the reverse ($6.42$ vs $7.90$ there, a small
+gap). This is the check that our Tier-3 pipeline reproduces the paper's setting,
+and it passes.
+
+\paragraph{Trajectory accuracy and image quality disagree.} Among the five
+samplers that produce an image at all at 10 \NFE, ranking by FID is the
+\emph{exact reverse} of ranking by distance to the converged image: L2 orders them
+RK2-in-$t$, DPM-Solver-1, DDIM, DPM-Solver-fast, DPM-Solver-2; FID orders them
+DPM-Solver-2, DPM-Solver-fast, DDIM, DPM-Solver-1, RK2-in-$t$. DPM-Solver-2 lands
+$2.3\times$ further from the converged image than DPM-Solver-1 ($180.6$ vs $78.4$)
+yet scores $1.8\times$ better FID; M9's independent 64-image batch agrees ($166.4$ vs
+$75.7$). Figure~\ref{fig:grid} shows what happens, and suggests why: a few large
+steps at high noise decide the picture's layout early and commit to it. DPM-Solver-2 then denoises crisply --- a
+good sample, but not \emph{this} trajectory's sample --- while RK2 in $t$ stays on
+the trajectory and leaves it noisy. FID rewards the first, L2 the second. By
+$\sim$20 \NFE\ the two metrics largely agree again (rank correlation $+0.60$,
+against $-1.00$ at 10 \NFE), and the best samplers are within
+FID-5k noise of the converged run (two score marginally \emph{below} it).
+
+This is the project's thesis in one table. ``DPM-Solver produces good images in 10
+\NFE'' and ``DPM-Solver integrates the ODE accurately in 10 \NFE'' are different
+claims; the paper's evidence is for the first. For the second, no sampler we ran
+comes within a few gray levels of the converged image at 10 \NFE: the closest,
+RK2 in $t$, is still 11 gray levels RMS away. Neither metric alone answers which sampler is best: one
+asks for a plausible image, the other for the image this noise was meant to
+become.
+
+\paragraph{Caveats: absolute FID, and the sample-size floor.} Our absolute FIDs are
+about three times the paper's --- even the converged run scores $16.5$ against the
+paper's ${\sim}5.25$ --- so only rankings are compared. How much of that is the
+sample size alone is measurable (notebook 11b, Figure~\ref{fig:floor}): real,
+held-out CIFAR-10 test images, scored with the identical FID call, follow
+$\mathrm{FID} \approx 3.0\times10^{4}/N$ almost exactly from 1,000 to 10,000
+images. At 10,000 they give $3.15$, clean-fid's documented test-versus-train value,
+which also validates the FID pipeline itself. At our 5,000 images the floor --- the
+best FID any sampler could score in this setup --- is $5.9$; at the paper's 50,000
+the same term is ${\approx}\,0.6$. Sample size therefore explains $5.2$ of the
+$11.2$-point gap to the paper, a little under half. The other half is a real
+difference: with the sample-size term removed, our converged samples score
+${\approx}\,10.6$ against the paper's ${\approx}\,4.6$. Plausible causes are
+clean-fid's port of the TensorFlow Inception network and the discrete-to-continuous
+time conversion (the paper's ``Type-2 discrete'' against the vendored code's
+interpolated schedule); we did not isolate them. Because the floor shifts every
+sampler by the same amount, it changes no ranking in Table~\ref{tab:fid}.
+
+Two smaller points. The FID samples were seeded from Python's per-process string
+hash, so they are not bit-reproducible and differ between samplers; differences of a
+few tenths are noise. The L2 columns use M11's own 64-image batch (seed 1); M9's
+seed-0 batch reproduces them to within 3--9\%, with the same rankings.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.62\textwidth]{11b_fid_floor.png}
+\caption{The FID floor (notebook 11b). Real, held-out CIFAR-10 test images scored
+with M11's FID call, three random draws per size (the error bars are narrower than
+the markers). The dashed line is M11's converged DPM-Solver-3 at 5,000 samples; the
+dotted vertical marks M11's sample size.}
+\label{fig:floor}
+\end{figure}
+
+% =====================================================================
+\section{The ledger}
+% =====================================================================
+
+Predictions were written down before the measurements that test them: six in the
+project guide, before any sweep ran, and eight in the review that led to M11 and
+M12. Every verdict is computed from the results CSVs by
+\texttt{notebooks/10\_report.ipynb} (\texttt{results/predictions\_ledger.csv}),
+not asserted by hand. Reporting the misses is more useful than reporting only the
+hits.
 
 \paragraph{Departures from the proposal.} The efficiency frontier is reported in
 \NFE\ rather than wall-clock (the paper's Table 7 shows runtime is linear in \NFE\
@@ -697,20 +944,89 @@ continuous Swiss roll, which has no closed-form score. The reference tolerance i
 $10^{-13}$ rather than $10^{-14}$, which SciPy refuses. Adaptive RK45 was
 \textbf{dropped}: step size is not a free variable for an adaptive method, so
 neither ``order versus $h$'' nor ``maximum stable $h$'' is defined on it; AB2
-restores the multistep row instead. FID was \textbf{dropped} at the
-week-2 gate in favour of $L_2$-to-reference, which is both the primary metric and
-the one consistent with this report's thesis. Added beyond the proposal: arm B,
-Gate G1, the crossover study, and the three-way decomposition.
+restores the multistep row instead. FID was cut at the week-2 gate and
+\textbf{restored in a limited role}: FID-5k on six samplers, as an anchor to the
+paper's Table 6 and a counterpoint to L2 --- never as the grading metric. Added
+beyond the proposal: arm B, Gate G1, the crossover study at both matched step and
+matched \NFE, the three-way Tier-3 error decomposition, the matched-protocol
+controls, the stability study on a curved problem, the data-concentration sweep,
+and the first sample images.
 
+\begin{table}[!htbp]
+\centering
+\caption{The guide's six predictions.}
+\label{tab:ledger}
+\small
+\begin{tabular}{@{}p{6.4cm}lp{6.7cm}@{}}
+\toprule
+Prediction & Verdict & Evidence \\
+\midrule
+Tiers 1--2 slopes match theory within $\pm0.15$ & \textbf{confirmed} &
+worst $|\Delta| = 0.094$ over 28 fits, asymptotic protocol; but up to $1.91$
+under the practitioner protocol (R1) \\[3pt]
+Arm A degrades as $\kappa$ grows; arms B/C do not & \textbf{narrowed} &
+no dependence on $\kappa$ at all on the linear tier; on the curved tier arm-A RK4
+has a real limit and arm B none --- curvature, not $\kappa$ (R2) \\[3pt]
+Euler-$\lam$ and DPM-Solver-1 are both first order but not identical &
+\textbf{confirmed} & slopes $1.02$ vs $0.99$; errors differ by $1.4\times$ at
+matched \NFE \\[3pt]
+RK4 wins per step, loses per \NFE, to DPM-Solver-3 & \textbf{narrowed} &
+holds on Tier 3 for \NFE\ 16--120 only; on Tiers 1--2 (asymptotic) RK4 wins both \\[3pt]
+Tier-3 slopes come out lower than theory & \textbf{confirmed} &
+8 of 9 fits $>0.15$ below theory; most of the gap is the budget, not the network (R1) \\[3pt]
+Arm B at low \NFE\ may be worse than arm A & \textbf{confirmed} &
+at the coarsest shared budget on all three tiers \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+\centering
+\caption{The review's eight predictions, tested by M11, M12 and notebook 11b.}
+\label{tab:ledger2}
+\small
+\begin{tabular}{@{}lp{6.0cm}lp{6.2cm}@{}}
+\toprule
+ & Prediction & Verdict & Evidence \\
+\midrule
+R1 & Under Tier 3's settings the exact-score tiers also miss theory: the shortfall is
+mostly the budget & \textbf{confirmed} & worst gap $1.91$ (Tier 2) vs $2.79$
+(Tier 3) --- $68\%$ with no network (\S5.2) \\[3pt]
+R2 & On the curved tier, RK in $t$ destabilises; the $\lam$ form does not &
+\textbf{confirmed} & arm-A RK4 $h_{\max} = 0.1998$; arm B: 0 of 5 limited;
+Jacobian $\sim1000\times$ Tier 1's (\S4.2) \\[3pt]
+R3 & At $t_{\text{end}}=10^{-3}$ the $\lam$ form pays off for RK4 on every tier &
+\textbf{confirmed} & $48\times$, $8551\times$, $10.6\times$; mixed for Euler/RK2
+(\S5.3) \\[3pt]
+R4 & At matched \NFE, order 3 overtakes order 1 near the paper's 10--12 \NFE\ on its
+checkpoint & \textbf{confirmed} & crossing at $14.1$ \NFE; $5.1$ and $9.2$ on the
+analytic tiers (\S6) \\[3pt]
+R5 & The exact linear split helps on concentrated data, hurts on spread-out data &
+\textbf{confirmed} & $s<10^{-2}$: DPM ahead at 83--100\% of points; $s=1$:
+classical steppers exact (\S4.3) \\[3pt]
+R6 & Our FID ranking at 10 \NFE\ matches Table 6 & \textbf{confirmed} & all three
+headline comparisons hold; top pair swapped (\S7) \\[3pt]
+R7 & L2 and image quality disagree at low \NFE & \textbf{confirmed} & DPM-2
+vs DPM-1: $2.3\times$ worse L2, $1.8\times$ better FID; rankings exactly reversed
+(\S7) \\[3pt]
+R8 & Most of our absolute-FID gap to the paper is the 5k sample size &
+\textbf{narrowed} & about half: $5.2$ of $11.2$ points (real images follow FID
+$\approx 3.0\times10^4/N$); the rest is a real pipeline difference (\S7) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage   % flush the ledger tables before moving on
 % =====================================================================
 \section{Reproducibility}
 % =====================================================================
 
-The engine is plain Python under \texttt{src/}, unit-tested (108 tests), with no
+The engine is plain Python under \texttt{src/}, unit-tested (129 tests), with no
 GPU or plotting code. Notebooks import it, run the sweeps and write
 \texttt{results/} and \texttt{figures/}. \texttt{run\_all.sh} reproduces every
-figure and CSV from a clean clone; it skips only the Tier-3 notebook, which needs
-a CUDA GPU and runs on Kaggle, and whose outputs are committed.
+laptop-side figure and CSV from a clean clone (notebooks 01--08, 10 and 12); it
+skips notebooks 09, 11 and 11b, which need a CUDA GPU and run on a Kaggle T4, and
+whose outputs are committed so that the report notebook reads them without a GPU.
 
 One implementation note worth recording: the same integrator and the same
 right-hand side definition march all three tiers. \texttt{integrate} is
@@ -723,30 +1039,38 @@ structural rather than a matter of careful duplication.
 \section{Conclusion}
 % =====================================================================
 
-Judged as a numerical method rather than an image generator, DPM-Solver holds up
-well, and the interesting failures are elsewhere.
+Judged as a numerical method, DPM-Solver holds up where its theory applies, and
+the interesting findings are about where it does not.
 
-On testbeds with analytic scores, every solver we tested attains its textbook
-order to within $0.1$ --- the order theorem is correct and our measurement
-machinery is sound. Against a real network the picture changes: order collapses,
-and it collapses in proportion to the order claimed, which is the signature of an
-unsatisfied smoothness hypothesis rather than of numerical noise. DPM-Solver-3 is
-the notable exception, retaining $2.995$ of its three orders once the measurement
-floor is excluded properly.
+On testbeds with analytic scores, in the asymptotic regime, every solver we tested
+reaches its textbook order to within $0.1$, and the published code implements the
+method correctly. But the order theorem is a statement about $h\to0$, and at the
+budgets diffusion models are sampled at --- 10--120 \NFE, integrated down to
+$t_{\text{end}}=10^{-3}$ --- no solver is in that regime, with or without a
+network: exact scores already miss theory by up to $1.9$, most of the $2.8$ seen on
+the network. At those budgets three other things decide which sampler wins.
 
-Two of the paper's incidental claims came out differently than expected. Its
-\S4.2 instability assertion does not reproduce on our stiff Tier-1 problem, for a
-reason specific to the VP-linear schedule that we identify. And its unexplained
-Table 6 anomaly --- order 3 losing to order 1 at ${\sim}10$ \NFE\ --- is real,
-measurable, and driven by curvature rather than stiffness, though the analytic
-tiers alone reach only $\NFE_3^\star \approx 8.9$ of the paper's 10--12.
+\emph{Curvature.} It is what destabilises explicit steppers near the data --- not
+the stiffness knob the paper's \S4.2 and our own prediction pointed to --- and it
+moves the crossover at which order 3 starts to beat order 1 later, from $5$ \NFE\
+on a linear problem to $14$ on the real network, where it reproduces the paper's
+unexplained Table-6 anomaly. The $\lam$-reparameterisation removes the instability
+and, for RK4, cuts error by one to four orders of magnitude on every tier.
 
-The practical recommendation that falls out is narrower than ``use the highest
-order available''. Higher order pays only where the integrand is smooth enough to
-support it and only within a budget band that must be measured, not assumed; and
-past roughly 78 \NFE\ on this checkpoint, the choice of $t_{\text{end}}$ costs
-more than the discretisation does, so additional network calls are spent on the
-wrong error entirely.
+\emph{How concentrated the data is.} DPM-Solver's exact linear treatment is exact
+for a point mass and a handicap for data as spread out as the noise, where the
+classical right-hand side cancels identically. Its success on images is
+consistent with image data being concentrated; it is not unconditional.
+
+\emph{What ``good'' means.} At 10 \NFE\ ranking samplers by closeness to the
+converged image and ranking them by FID give exactly opposite orders among the ones
+that produce an image at all. DPM-Solver's advantage at low \NFE\ is real, and our
+FIDs rank it as the paper does; but it is an advantage in producing a
+\emph{plausible} image, not in integrating the ODE. A practitioner who needs the
+latter --- reproducible trajectories, interpolation in latent space, inversion ---
+should budget on the order of 30--50 \NFE: by 20 \NFE\ the two rankings already
+largely agree (rank correlation $+0.60$, against $-1.00$ at 10), and DPM-Solver-3
+comes within one gray level of the converged image at about 36.
 
 \vspace{4pt}
 \noindent\rule{\linewidth}{0.4pt}\\[2pt]

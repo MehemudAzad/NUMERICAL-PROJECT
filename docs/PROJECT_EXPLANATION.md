@@ -51,7 +51,7 @@ In Numerical Analysis, **FID is not an ODE metric**. A picture can look plausibl
 
 A rigorous numerical analysis asks:
 1. **Convergence Order ($p$):** If step size $h$ is halved, does error decrease by $2^p$? ($2\times$ for Order 1, $4\times$ for Order 2, $8\times$ for Order 3, $16\times$ for Order 4).
-2. **Stability Limits:** Does the solver blow up near the stiff boundary $t \to 0$? (The paper asserted classical solvers destabilize, but never measured a stability limit).
+2. **Stability Limits:** Does the solver blow up near the stiff boundary $t \to 0$? (The paper suggests, citing the literature, that classical explicit solvers "may suffer from unstable numerical issues for large step size", but never measures a stability limit.)
 3. **True Cost Efficiency:** High-order methods take multiple network evaluations per step. Dividing error by total NFE, does Order 3 actually beat Order 1 at low budgets?
 
 **Our project is the missing numerical audit of DPM-Solver.**
@@ -80,7 +80,7 @@ To isolate each factor scientifically, we designed two orthogonal axes: **3 Arms
 ```
 
 ### The 3 Solver Arms (Isolating the Innovations)
-* **Arm A:** Classical explicit schemes (Euler, Heun, RK3, RK4) on the raw ODE in time $t$.
+* **Arm A:** Classical explicit schemes (Euler, midpoint RK2, Heun's RK3, RK4, and the multistep AB2) on the raw ODE in time $t$.
 * **Arm B:** Classical schemes on the ODE transformed into $\lambda$ coordinates.
 * **Arm C:** DPM-Solver 1, 2, and 3 (exact linear solution + $\lambda$ coordinates).
 
@@ -93,7 +93,7 @@ To calculate numerical error, one needs the exact mathematical solution. We crea
 1. **Tier 1 (Anisotropic Gaussian):**
    * Data distribution is Gaussian. The ODE decouples into independent 1D linear ODEs with a **closed-form algebraic solution**.
    * Reference error is **0.000000** (exact pen-and-paper formula).
-   * Runs on CPU in seconds. Lets us test stiffness condition number $\kappa = s_{\max}/s_{\min}$ over 5 orders of magnitude ($10^1$ to $10^5$).
+   * Runs on CPU in seconds. Lets us test stiffness condition number $\kappa = s_{\max}/s_{\min}$ over 5 values, $\kappa \in \{1, 10, 10^2, 10^3, 10^4\}$ (stress-tested to $10^8$).
 2. **Tier 2 (Gaussian Mixture / Swiss Roll):**
    * Data distribution is an 8-mode mixture on a nonlinear Swiss roll.
    * Score function is closed-form, but nonlinear.
@@ -107,13 +107,13 @@ To calculate numerical error, one needs the exact mathematical solution. We crea
 
 ## 5. Major Discoveries & Novel Contributions
 
-### 1. Order Collapse on Real Neural Networks
+### 1. Order: exact where the theorem applies, pre-asymptotic at practitioner budgets
 * **On smooth math (Tiers 1 & 2):** Every solver achieved close to its exact theoretical order:
   * Order 1 $\approx 0.99$ – $1.00$
   * Order 2 $\approx 2.02$ – $2.03$
   * Order 3 $\approx 3.08$ – $3.09$
   * RK4 $\approx 3.94$ – $4.00$
-* **On the real neural network (Tier 3):** Higher-order methods **collapsed**!
+* **On the real neural network (Tier 3), at 10–120 NFE down to $t_{\text{end}}=10^{-3}$:** measured slopes fall well below theory:
   * **RK4 collapsed from $3.94 \to 1.21$**
   * **DPM-Solver-3 collapsed from $3.09 \to 2.47$**
   * **Euler barely dropped ($1.01 \to 0.84$)**
@@ -155,8 +155,42 @@ which the network then makes somewhat worse on top of (see
 ---
 
 ### 3. Dissecting the Value of $\lambda$ Coordinates
-* On smooth analytical problems, switching from $t$ to $\lambda$ changes very little.
-* On the real neural network, switching from $t$ to $\lambda$ yields an **order-of-magnitude error reduction** because it automatically packs steps near the stiff data boundary ($t \to 0$), where the neural network's job is hardest.
+Error of arm A (uniform in $t$) divided by arm B (uniform in $\lambda$) at the largest shared NFE — above 1 means $\lambda$ is better (`results/reparam_gain.csv`):
+
+| | Euler | RK2 | RK4 |
+|---|---|---|---|
+| Tier 1, $t_{\text{end}}=0.2$ | 0.93 | 0.32 | 0.47 |
+| Tier 1, $t_{\text{end}}=10^{-3}$ | 0.69 | 0.85 | **48** |
+| Tier 2, $t_{\text{end}}=10^{-3}$ | 9.9 | 33 | **8551** |
+| Tier 3 (network) | 0.63 | 0.56 | **10.6** |
+
+* For **RK4**, $\lambda$ helps on **every** tier once the run reaches the data end ($t_{\text{end}}=10^{-3}$) — not only on the network. An earlier draft of this page said "on smooth analytical problems it changes very little"; that was measured at $t_{\text{end}}=0.2$, which never reaches the stiff region.
+* For the low-order steppers it is mixed: a big win on the curved Tier 2, slightly worse on Tier 1 and on the network.
+* Why: a uniform-$\lambda$ grid packs nodes near $t \to 0$; a uniform-$t$ grid leaves one long last step across it, and RK4 is the stepper whose stages sample that region hardest.
+
+---
+
+### 4. Stability: caused by curvature, not stiffness
+* **Tier 1 (linear):** no instability at any $\kappa$ — every stepper is stable even with 2 steps. The product $h \cdot J(t_{\text{end}}+h) \lesssim 0.9$ near $t\to0$ (an exact cancellation), so Euler's threshold of 2 is never reached.
+* **Tier 2 (curved mixture):** the Jacobian at $t=10^{-3}$ is ~1000× larger (545 vs 0.54). **RK4 in $t$ has a real stability limit**, $h_{\max}=0.1998$ (stable from 5 steps, diverges at 2–4); RK4 is the only stepper whose last stage evaluates at $t_{\text{end}}$ itself. **Arm B (λ) is stable everywhere.**
+* So the paper's §4.2 claim is *narrowed*: explicit steppers in $t$ do destabilise — because of curvature, not the stiffness knob $\kappa$ — and $\lambda$ fixes it. (`results/stability_tier2.csv`, `notebooks/12_controls.ipynb` §12.2)
+
+---
+
+### 5. When does DPM-Solver's "exact linear part" actually help?
+* For data **concentrated at a point** ($s \to 0$): $\epsilon = x/\sigma$ is *constant* along the trajectory, so DPM-Solver-1 is **exact**.
+* For data **as spread out as the noise** ($s = 1$): the classical right-hand side is **identically zero**, so Euler/RK are exact while DPM-Solver-1 is not.
+* Measured (`results/split_benefit.csv`): at 20 NFE with $s<10^{-2}$, DPM-1 beats Euler-in-$t$ at 83% of points and DPM-2 beats RK2-in-$t$ at 100%; at $s=1$ the classical steppers are exact to $10^{-16}$.
+* On Tier 1 (variances up to 1) DPM-Solver-1/2 lose to same-order RK at every budget; on Tier 2 (point masses) DPM-2 is the best solver at 10–12 NFE. Natural images are concentrated data — consistent with DPM-Solver's success there.
+
+---
+
+### 6. What the samples look like: accuracy vs image quality (M11)
+* The project's first generated images: `figures/11_samples_grid.png` — at 10 NFE, DDIM/DPM-1 give the **right picture, blurred**; RK2-in-$t$ the right picture, noisy; **DPM-2 a sharp but different picture**; DPM-3 (9 NFE) static.
+* **FID-5k at 10 NFE** ranks samplers the same way the paper's Table 6 does: DPM-2 24.9 < DPM-fast 31.3 < DDIM 39.5 < DPM-1 44.9 < DPM-3 143 (only the top pair is swapped).
+* **But distance to the converged image ranks them in the exact reverse order** (rank correlation −1.00 among the five image-producing samplers; +0.60 by 20 NFE). DPM-2 is 2.3× further from the converged image than DPM-1, yet 1.8× better FID.
+* Meaning: "DPM-Solver makes good images in 10 NFE" (true — FID) and "DPM-Solver solves the ODE accurately in 10 NFE" (false — no sampler is within a few gray levels) are different claims. This is the project's thesis, with data. (`results/tier3_fid_vs_l2.csv`)
+* Caveat: our absolute FIDs are ~3× the paper's, so only rankings are compared. `notebooks/11b_fid_floor.ipynb` measured the sample-size part: real CIFAR-10 images follow FID ≈ 3×10⁴/N (5.9 at our 5k, 3.15 at 10k — the documented value), which explains about **half** of the gap; the other half is a real difference in our pipeline (FID code / discrete-time conversion). It shifts every sampler equally, so rankings are unaffected.
 
 ---
 
@@ -171,4 +205,5 @@ If your instructor or examiner asks: **"What did you do in this project and what
 > *Our key findings were:*
 > 1. *DPM-Solver achieves its theoretical order under the assumptions the proof actually needs — a smooth score, matched to the step-size range being fit. Most of what looks like "order collapse" on the real network is already present with an exact score, once Tiers 1–2 are measured at the network's own practitioner NFE budgets rather than an easier asymptotic range; the network then makes it moderately worse on top.*
 > 2. *At practical low-step budgets, Order 1 can beat Order 3 — a direct reproduction of the paper's own Table 6 anomaly. Compared the way the paper compares (equal NFE, not equal step count), the crossover rises from ≈5 NFE (the exact linear tier) to ≈14 NFE on the real network, bracketing the paper's own ~10–12.*
-> 3. *Instability comes from curvature, not stiffness: provably absent on the linear, decoupled tier (an exact cancellation), but real and measurable once we tested the project's own stability bisector on the nonlinear tier. The λ-reparameterisation's benefit is not network-specific either — it is largest on the exact analytic tiers and still substantial on the real network."*
+> 3. *Instability comes from curvature, not stiffness: provably absent on the linear, decoupled tier (an exact cancellation), but real on the curved tier, where RK4 in $t$ has a measured stability limit and the $\lambda$-reparameterisation removes it. For RK4, $\lambda$ coordinates cut error on every tier (48×, 8551×, 10.6×), not only on the network.*
+> 4. *Most importantly, trajectory accuracy and image quality disagree: at 10 NFE, ranking samplers by distance to the converged image is the exact reverse of ranking them by FID. DPM-Solver-2 lands 2.3× further from the true ODE solution than DPM-Solver-1 yet scores 1.8× better FID, because it produces a sharp but different image. Our FID ranking matches the paper's, so the paper is right about image quality — but that is a different claim from solving the ODE accurately, which is exactly why solvers should also be judged as numerical methods."*

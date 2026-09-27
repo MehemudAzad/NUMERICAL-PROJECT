@@ -160,9 +160,9 @@ report/            LaTeX report (TikZ diagrams, pgfplots) -> report/main.pdf
 | M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ✅ | `notebooks/10_report.ipynb`, `run_all.sh`, `tests/test_report.py` (19), `results/master_order_table.csv`, `results/crossover_summary.csv`, `results/predictions_ledger.csv`, `results/proposal_coverage.csv`, `figures/10_*.png` |
 | M11 | look at the samples; anchor Tier 3 to the paper (FID) | ✅ | `src/imaging.py`, `src/tier3.py` (`method=`/`skip_type=` kwargs on `sample_dpm_solver_t3`), `tests/test_tier3.py` (+10), `notebooks/11_samples_fid.ipynb`, `results/tier3_fid.csv`, `results/tier3_per_image_l2.csv`, `figures/11_*.png` — Kaggle run complete 2026-09-25; see §11.1 below |
 | M12 | controls on the analytic tiers (matched protocol, Tier-2 stability, matched-NFE crossover, split-benefit sweep) | ✅ | `src/crossover.py` (`crossover_nfe`), `src/stability.py` (`factor`/`ref` kwargs), `tests/test_crossover.py` (+2), `tests/test_split_benefit.py` (2), `notebooks/12_controls.ipynb`, `results/controls_matched_protocol.csv`, `results/stability_tier2.csv`, `results/crossover_matched_nfe.csv`, `results/split_benefit.csv`, `figures/12_*.png` |
-| M13 | rewrite the conclusions (ledger, report, docs) to match M11+M12 | ⬜ **owned by a teammate — report/main.tex is intentionally not touched here** | M11 and M12's data are both ready (this file, §11.1) |
+| M13 | rewrite the conclusions (ledger, report, docs) to match M11+M12 | ✅ | `notebooks/10_report.ipynb` (M11/M12 inputs, §6b/§6c controls, ledger with a `source` column: 6 guide + 8 review predictions), `results/matched_protocol_slopes.csv`, `results/reparam_gain.csv`, `results/tier3_fid_vs_l2.csv`, `tests/test_report.py` (+4), `report/main.tex` rewritten + `report/main.pdf`, `notebooks/11b_fid_floor.ipynb` (Kaggle, run 2026-09-27; committed with outputs), `results/tier3_fid_floor.csv` (per-draw FIDs transcribed from that notebook's printed output, 2 d.p. — the CSV itself was not downloaded), `figures/11b_fid_floor.png` (extracted from the notebook), `docs/PROJECT_EXPLANATION.md` |
 
-`python -m pytest` → **125 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
+`python -m pytest` → **129 passed** (+4 M13: the two M12 CSVs in the schema check, the M13 tables, the FID floor; was 19 as of commit `27dd657`; +14 M3, +7 M4,
 +5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10, +3 the `fit_order` floor, +10 M11
 (`sample_dpm_solver_t3`/`to_uint8` plumbing tests, no GPU needed), +4 M12
 (`crossover_nfe` + the `s=1` exact-cancellation check)). All green now that the
@@ -203,8 +203,11 @@ at low NFE in both — the shape matches; only the order *within* the top pair
 is swapped (`dpm2` edges out `dpm_fast` here, reversed in the paper). Read as
 validating Tier 3's setup, not refuting it.
 
-Whoever picks up M13: the numbers above are ready to drop into the ledger and
-report as-is; I have not touched `report/main.tex` (a teammate owns it).
+M13 (2026-09-27) put these numbers into the ledger and the report. Two things the
+report now states that this section did not: among the five samplers that produce an
+image at 10 NFE, the FID ranking is the *exact reverse* of the L2 ranking (Spearman
+−1.00; +0.60 at 20 NFE); and M11's L2 batch is seed 1 (M9's is seed 0), which
+reproduces M9 to within 3–9% with identical rankings.
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
@@ -572,6 +575,29 @@ decomposition (discretization / `t_end` truncation / network approximation).
 ---
 
 ## 8. Gotchas already hit
+
+- **Protocols (M12/M13).** The Tier-1/2 order sweeps (notebooks 05, 07) run to
+  `t_end = 0.2` at NFE ≥ 16–64 — the *asymptotic* protocol. Tier 3 runs to
+  `t_end = 1e-3` at 9–120 NFE. Never compare slopes across the two; use
+  `results/matched_protocol_slopes.csv`, which has both.
+- `run_all.sh` was committed without the executable bit (git mode 100644), so
+  `./run_all.sh` failed on a fresh clone with "permission denied". Fixed by
+  `chmod +x` (M13).
+- Notebook 11 seeds each FID sampler with `hash(label)`; Python randomises string
+  hashes per process, so those 5k-sample sets are not bit-reproducible and differ
+  between samplers. Rankings with ≥1.5× gaps are unaffected; say so if quoting FID.
+- Notebook 11's 201-step reference cache is keyed by file name only
+  (`results/tier3_ref_s201_e1e-3.pt`, shared with notebook 09) but M11 uses a
+  seed-1 batch where M9 uses seed 0. Running 09 then 11 in one Kaggle session would
+  load the wrong reference. The committed M11 run was a fresh session (checked: its
+  errors at 120 NFE fall to 0.33–0.94, matching M9); key the cache by seed before
+  re-running.
+- clean-fid on macOS/Windows needs `num_workers=0` (its worker processes cannot
+  pickle a resize lambda under `spawn`), and SciPy 1.18 removed
+  `scipy.linalg.sqrtm(..., disp=)`, which clean-fid calls. `notebooks/11b` handles
+  both; Kaggle (Linux, older SciPy) needs neither.
+- Tectonic fetches LaTeX packages on first build; on a flaky network a single file
+  can fail (e.g. `lmcsc10.pfb`). Just re-run — downloads are cached.
 
 - Homebrew `python@3.14` is broken on macOS 26 → use `uv` + Python 3.12 (see §3).
 - The vendored solver was committed as a 15-byte `404: Not Found` stub; re-fetched

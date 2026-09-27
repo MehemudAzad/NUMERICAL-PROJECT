@@ -64,7 +64,7 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r requirement
 Run the tests from the repo root:
 
 ```bash
-python -m pytest          # 125 passed
+python -m pytest          # 129 passed
 ```
 
 Reproduce every figure and results CSV from a clean clone:
@@ -74,8 +74,8 @@ Reproduce every figure and results CSV from a clean clone:
 ./run_all.sh --tests-only # just the suite
 ```
 
-`run_all.sh` deliberately skips notebooks 09 and 11 — Tier 3 needs a CUDA GPU
-and runs on a Kaggle T4 (Internet ON, Accelerator T4 ×1). Their outputs are
+`run_all.sh` deliberately skips notebooks 09, 11 and 11b — they need a CUDA GPU
+and run on a Kaggle T4 (Internet ON, Accelerator T4 ×1). Their outputs are
 committed, so the report notebook reads them without a GPU present.
 
 ## Milestone status
@@ -95,7 +95,7 @@ committed, so the report notebook reads them without a GPU present.
 | M10 | Final figures, `run_all.sh`, report tables (notebook 10) | ✅ done |
 | M11 | Samples + FID anchor (`src/imaging.py`, notebook 11) | ✅ done (Kaggle run complete) |
 | M12 | Controls on the analytic tiers (notebook 12) | ✅ done |
-| M13 | Rewrite the conclusions to match M11+M12 | ⬜ owned by a teammate (`report/main.tex`) |
+| M13 | Rewrite the conclusions to match M11+M12: ledger, report, docs; FID floor (notebook 11b) | ✅ done |
 
 Milestones are done **sequentially**, one owner at a time. M11–M13 are a
 post-review correction pass — see `docs/MILESTONES_M11-M13.md`.
@@ -109,10 +109,19 @@ emits the guide's Part-5 checklist:
 |---|---|
 | `results/master_order_table.csv` | every (tier, arm, solver): theoretical order, measured slope, fit window, R² |
 | `results/crossover_summary.csv` | `h*` and `nfe3*` per testbed and κ — the headline result |
-| `results/predictions_ledger.csv` | the guide's six predictions, each marked confirmed / refuted / narrowed **from the data** |
+| `results/predictions_ledger.csv` | the guide's six predictions and the 2026-09-24 review's eight, each marked confirmed / refuted / narrowed / pending **from the data** (`source` column says which) |
+| `results/matched_protocol_slopes.csv` | measured order under the asymptotic and the practitioner protocol, all three tiers side by side |
+| `results/reparam_gain.csv` | what the λ-reparameterisation buys: error of arm A / arm B, per tier and protocol |
+| `results/tier3_fid_vs_l2.csv` | FID-5k beside the paper's FID and the L2 distance, per sampler at ~10 and ~20 NFE, with ranks |
 | `results/proposal_coverage.csv` | the honest ledger vs the proposal deck: delivered / substituted / dropped / added |
 | `figures/10_error_vs_nfe_all.png` | error vs NFE, every tier, every arm |
 | `figures/10_efficiency_frontier.png` | error per NFE — higher order is not automatically cheaper |
 
-FID was **cut at Gate G2**, as the guide permits: L2-to-reference is the primary
-Tier-3 read-out and ships alone.
+FID was cut at Gate G2 and **restored by M11 in a limited role**: FID-5k as an
+anchor to the paper's Table 6 and a counterpoint to L2 — never as the grading
+metric. L2-to-reference remains the primary Tier-3 read-out.
+
+The report is `report/main.tex` → `report/main.pdf`. Build it with `make -C report`
+(latexmk) or `make -C report tectonic` (no TeX install needed: `brew install tectonic`).
+Its FID caveats use the FID floor from `notebooks/11b_fid_floor.ipynb` (Kaggle): real CIFAR-10
+test images follow FID ≈ 3.0×10⁴/N, 5.9 at M11's 5,000 samples.

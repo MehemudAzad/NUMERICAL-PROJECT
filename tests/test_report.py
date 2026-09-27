@@ -213,3 +213,17 @@ def test_m13_tables_if_built():
         f = pd.read_csv(fv)
         assert set(f["budget"]) == {10, 20}
         assert f["fid"].notna().all() and (f["fid"] > 0).all()
+
+
+def test_fid_floor_if_present():
+    """Notebook 11b: real images scored with M11's FID call. FID must fall with N
+    (it is pure small-sample bias here), and 10k must land near clean-fid's documented
+    CIFAR-10 test-vs-train value (~3.1) -- the check that the pipeline is sound."""
+    path = RESULTS / "tier3_fid_floor.csv"
+    if not path.exists():
+        pytest.skip("tier3_fid_floor.csv not present (notebook 11b runs on Kaggle)")
+    means = pd.read_csv(path).groupby("n_samples")["fid"].mean().sort_index()
+    assert 5000 in means.index, "M11 scored 5k samples; the floor must be measured there"
+    assert means.is_monotonic_decreasing
+    if 10000 in means.index:
+        assert 2.5 < means[10000] < 4.0
