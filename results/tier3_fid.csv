@@ -1,0 +1,14 @@
+config,nfe,n_samples,fid,method
+ddim_quad,10,5000,39.542810017000306,clean-fid CIFAR-10 train stats
+ddim_quad,20,5000,25.09739150039576,clean-fid CIFAR-10 train stats
+dpm1,10,5000,44.908801771922754,clean-fid CIFAR-10 train stats
+dpm1,20,5000,27.013837099024613,clean-fid CIFAR-10 train stats
+dpm2,10,5000,24.911104055854253,clean-fid CIFAR-10 train stats
+dpm2,20,5000,15.61017172289911,clean-fid CIFAR-10 train stats
+dpm3,9,5000,143.26161514231785,clean-fid CIFAR-10 train stats
+dpm3,18,5000,18.728242305066544,clean-fid CIFAR-10 train stats
+dpm_fast,10,5000,31.2800711859648,clean-fid CIFAR-10 train stats
+dpm_fast,20,5000,17.974882679563166,clean-fid CIFAR-10 train stats
+rk2_t,10,5000,52.904570418996286,clean-fid CIFAR-10 train stats
+rk2_t,20,5000,15.713826851819533,clean-fid CIFAR-10 train stats
+dpm3_converged,99,5000,16.456448248163895,clean-fid CIFAR-10 train stats

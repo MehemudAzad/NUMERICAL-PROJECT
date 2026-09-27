@@ -110,6 +110,8 @@ src/               pure-python engine — NO gpu, NO plotting. Unit-tested.
   arm_c.py         wrapper around third_party/ for DPM-2/3   [M4 ✅]
   metrics.py       sliding-window log-log order fitter       [M5]
   stability.py     bisection for max stable h                [M6]
+  crossover.py     every sign change of log(err3)-log(err1)  [M8]
+  tier3.py         DiscreteSchedule + network oracle (GPU)   [M9]
 tests/             pytest; runs in seconds on the laptop. Gate G1 lives here.
 notebooks/         one NN_*.ipynb per milestone
 third_party/       vendored dpm_solver_pytorch.py (unmodified, pinned commit
@@ -118,6 +120,8 @@ third_party/       vendored dpm_solver_pytorch.py (unmodified, pinned commit
 results/           git-tracked CSVs. Big *.pt/*.npz are gitignored.
 figures/           git-tracked PNGs.
 docs/              the guide, the deck, the paper, the chat log, the rules.
+run_all.sh         clean-clone reproduction: tests + notebooks 01-08, 10  [M10]
+report/            LaTeX report (TikZ diagrams, pgfplots) -> report/main.pdf
 ```
 
 ---
@@ -150,13 +154,60 @@ docs/              the guide, the deck, the paper, the chat log, the rules.
 | M4 | arm C (DPM-Solver-1 + authors' code) + **Gate G1** | ✅ | `src/dpm.py`, `src/arm_c.py`, `tests/test_gate_g1.py` (2), `tests/test_arm_c.py` (5), `notebooks/04_arm_c.ipynb` |
 | M5 | order fitter + Tier-1 convergence experiment (first results/figures) | ✅ | `src/metrics.py`, `tests/test_metrics.py` (5), `notebooks/05_convergence.ipynb`, `results/tier1_order.csv`, `figures/05_error_vs_h.png`, `figures/05_error_vs_nfe.png` |
 | M6 | stability envelope, κ sweep | ✅ | `src/stability.py`, `tests/test_stability.py` (6), `notebooks/06_stability.ipynb`, `results/stability_envelope.csv`, `figures/06_stability_envelope.png` |
-| **M7** | **Tier-2 mixture testbed + DOP853 reference + order under curvature** | ⬜ **next** | |
-| M8 | crossover study (h* where order-3 overtakes order-1) — headline | ⬜ | |
-| M9 | Tier-3 CIFAR-10 Kaggle notebook | ⬜ | |
-| M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ⬜ | |
+| M7 | Tier-2 mixture testbed + DOP853 reference + order under curvature | ✅ | `MixtureTier2`/`swiss_roll`/`dop853_reference` in `src/testbeds.py`, `tests/test_tier2.py` (13), `notebooks/07_tier2.ipynb`, `results/tier2_order.csv`, `figures/07_error_vs_h.png`, `figures/07_error_vs_nfe.png` |
+| **M8** | **crossover study (h\* where order-3 overtakes order-1) — headline** | ✅ | `src/crossover.py`, `tests/test_crossover.py` (7), `notebooks/08_crossover.ipynb`, `results/crossover_sweep.csv`, `figures/08_crossover.png` |
+| M9 | Tier-3 CIFAR-10 Kaggle notebook | ✅ | `src/tier3.py`, `tests/test_tier3.py` (18), `notebooks/09_tier3_cifar10.ipynb` (committed **with** its Kaggle outputs), `results/tier3_error.csv` (72 rows), `results/tier3_decomposition.csv`, `figures/09_*.png` |
+| M10 | final figures, `run_all`, report tables (confirmed / refuted / dropped claims) | ✅ | `notebooks/10_report.ipynb`, `run_all.sh`, `tests/test_report.py` (19), `results/master_order_table.csv`, `results/crossover_summary.csv`, `results/predictions_ledger.csv`, `results/proposal_coverage.csv`, `figures/10_*.png` |
+| M11 | look at the samples; anchor Tier 3 to the paper (FID) | ✅ | `src/imaging.py`, `src/tier3.py` (`method=`/`skip_type=` kwargs on `sample_dpm_solver_t3`), `tests/test_tier3.py` (+10), `notebooks/11_samples_fid.ipynb`, `results/tier3_fid.csv`, `results/tier3_per_image_l2.csv`, `figures/11_*.png` — Kaggle run complete 2026-09-25; see §11.1 below |
+| M12 | controls on the analytic tiers (matched protocol, Tier-2 stability, matched-NFE crossover, split-benefit sweep) | ✅ | `src/crossover.py` (`crossover_nfe`), `src/stability.py` (`factor`/`ref` kwargs), `tests/test_crossover.py` (+2), `tests/test_split_benefit.py` (2), `notebooks/12_controls.ipynb`, `results/controls_matched_protocol.csv`, `results/stability_tier2.csv`, `results/crossover_matched_nfe.csv`, `results/split_benefit.csv`, `figures/12_*.png` |
+| M13 | rewrite the conclusions (ledger, report, docs) to match M11+M12 | ✅ | `notebooks/10_report.ipynb` (M11/M12 inputs, §6b/§6c controls, ledger with a `source` column: 6 guide + 8 review predictions), `results/matched_protocol_slopes.csv`, `results/reparam_gain.csv`, `results/tier3_fid_vs_l2.csv`, `tests/test_report.py` (+4), `report/main.tex` rewritten + `report/main.pdf`, `notebooks/11b_fid_floor.ipynb` (Kaggle, run 2026-09-27; committed with outputs), `results/tier3_fid_floor.csv` (per-draw FIDs transcribed from that notebook's printed output, 2 d.p. — the CSV itself was not downloaded), `figures/11b_fid_floor.png` (extracted from the notebook), `docs/PROJECT_EXPLANATION.md` |
 
-`python -m pytest` → **51 passed** (was 19 as of commit `27dd657`; +14 M3, +7 M4,
-+5 M5, +6 M6).
+`python -m pytest` → **129 passed** (+4 M13: the two M12 CSVs in the schema check, the M13 tables, the FID floor; was 19 as of commit `27dd657`; +14 M3, +7 M4,
++5 M5, +6 M6, +13 M7, +7 M8, +18 M9, +19 M10, +3 the `fit_order` floor, +10 M11
+(`sample_dpm_solver_t3`/`to_uint8` plumbing tests, no GPU needed), +4 M12
+(`crossover_nfe` + the `s=1` exact-cancellation check)). All green now that the
+Kaggle run's CSVs are committed — the Tier-3 checks that used to skip are live.
+`run_all.sh` has been executed end to end (now including notebook 12): the raw
+sweeps reproduce to 1.8e-15 absolute and the fitted slopes to 4.2e-5.
+
+### §11.1 — M11: the Kaggle run's result
+
+Run on Kaggle T4, 2026-09-25, 5k FID samples. `results/tier3_fid.csv` (13 rows),
+`results/tier3_per_image_l2.csv` (3072 rows), `figures/11_samples_grid.png`,
+`figures/11_per_image_l2.png`, `figures/11_fid_vs_l2.png`.
+
+**The samples grid is a real, useful sanity check the project never had**:
+`dpm3` at 9 NFE is visibly noise (gl=50.7, the image is static); every
+sampler converges visually to the same reference by ~20 NFE. First image the
+project has ever produced.
+
+**The L2-vs-FID disagreement, now with numbers.** At NFE≈10, on the *same*
+checkpoint, *same* `x_T`:
+
+| solver | L2 (`results/tier3_error.csv`, M9) | FID (`results/tier3_fid.csv`, M11) |
+|---|---|---|
+| dpm1 | **75.7** (best of the two) | 44.9 |
+| dpm2 | 166.4 (loses on L2) | **24.9** (best of the two, by 1.8x) |
+
+L2 ranks DPM-1 over DPM-2; FID ranks DPM-2 over DPM-1, by a wide margin, on the
+identical run. This is the project's thesis ("judge solvers as ODE solvers,
+not by FID") made concrete with real data, not just argued for.
+
+**Decision-gate verdict: qualitative match, proceed.** Full ranking at
+NFE≈10 (best first): `dpm2` (24.9) < `dpm_fast` (31.3) < `ddim_quad` (39.5) <
+`dpm1` (44.9) < `rk2_t` (52.9) < `dpm3` (143.3, at 9 NFE). Paper's Table 6 at
+10 NFE: DPM-fast (6.42) ≲ DPM-2 (7.90) < DDIM ≈ DPM-1 (16.69) < DPM-3 (24.37).
+The top pair (`dpm2`/`dpm_fast`) and bottom pair
+(`ddim_quad`/`dpm1`) each cluster together and DPM-3 is catastrophically worse
+at low NFE in both — the shape matches; only the order *within* the top pair
+is swapped (`dpm2` edges out `dpm_fast` here, reversed in the paper). Read as
+validating Tier 3's setup, not refuting it.
+
+M13 (2026-09-27) put these numbers into the ledger and the report. Two things the
+report now states that this section did not: among the five samplers that produce an
+image at 10 NFE, the FID ranking is the *exact reverse* of the L2 ranking (Spearman
+−1.00; +0.60 at 20 NFE); and M11's L2 batch is seed 1 (M9's is seed 0), which
+reproduces M9 to within 3–9% with identical rankings.
 
 Key facts already verified: closed-form Tier-1 trajectory satisfies the ODE to
 ~1e-11 (finite-diff) and matches an independent DOP853 integration to 1e-12; our
@@ -216,6 +267,167 @@ team before M7/M9, since it changes what M6's figure can claim in the report
 (the flat stability map is still worth showing, but the "arm A degrades
 sharply" framing in the M6 spec above should not be used until/unless a later
 tier reproduces it).
+
+**M7 finding — every solver keeps its textbook order under real curvature.**
+`MixtureTier2` (`mog8`: 8 modes on a Swiss-roll curve, `swiss_roll(n=8,
+noise=0.0)`) makes the PF-ODE right-hand side genuinely nonlinear in `x` (the
+posterior mean is a softmax over 8 modes, not a fixed linear shrinkage like
+Tier 1's), with no algebraic reference — `dop853_reference` (SciPy DOP853,
+`rtol=1e-13`) stands in, checked converged against a tighter `rtol=1e-11`
+(agreement `6.9e-13`, far below every measured error). Re-running M5's exact
+sweep design on this testbed (`notebooks/07_tier2.ipynb`): worst
+`|measured − theoretical|` across all 14 (arm, solver) pairs is **0.084**,
+mean R² **0.99996** — as clean as Tier 1's linear numbers, and the max slope
+shift from Tier 1's kappa=10 table is only **0.059**. One deliberate
+deviation from M6: `T_END=0.2`, not `1e-3` — pushing to the stiff boundary
+*combined with* real curvature left every solver's sweep still pre-asymptotic
+at the M5 `n_steps` ranges (measured slopes off by up to 1.2), so this
+experiment isolates curvature alone, the same way M5 isolated stiffness alone
+at a moderate `t_end`. Net read: the order theorem's smoothness hypothesis
+(paper Assumption B.1) holds on this curved-but-exact-score testbed, same as
+the linear one — no order loss from curvature by itself.
+
+**M8 finding — the crossover is real, flat across kappa, and moved toward
+the paper's number by curvature, but doesn't reach it.** `src/crossover.py`
+(`crossover_h`) finds every sign change of `log(err_dpm3) − log(err_dpm1)`
+between the two curves swept at *matched h* (a shared macro-step-count list,
+so both orders share the same `h`; NFE differs 3x, per `singlestep_fixed`'s
+cost). At `T_END=1e-3` (the paper's own `ε=1e-3`), Tier 1 crosses at
+`nfe3_star` in **4.4–5.0** across all five swept kappa (1 → 1e4) — essentially
+flat, echoing M6's kappa-independence finding for stability. Tier 2 (`mog8`)
+crosses later, at `nfe3_star ≈ 8.9` — closer to the paper's observed ~10–12
+NFE (Table 6), but still short of it. Read together with M7: **stiffness
+alone doesn't move the crossover toward the paper's number; curvature does,
+partway.** Both analytic tiers still have an *exact* score (zero model
+error), so the honest conclusion is that the remaining gap is a reasonable
+place to lay the blame on the real network's approximation error and much
+higher intrinsic dimensionality (d=3072 vs d=2–3 here) — this narrows, not
+confirms, Table 6's finding, the same shape of result M6 reported for
+stability. `notebooks/08_crossover.ipynb` §5 reproduces the guide's own
+illustrative sketch with real data (order-3 visibly worse than order-1 left
+of the dashed `h*` line, on both Tier 1 kappa=10 and `mog8`). One thing worth
+remembering if M9/M10 revisit this: DPM-Solver-3's error is genuinely
+non-monotonic at the coarsest grids tested (a real dip-then-rise, not noise —
+visible directly in `figures/08_crossover.png`), which is exactly why
+`crossover_h` reports *every* sign change rather than assuming a single
+crossing; in every group actually swept here there was only one anyway.
+
+**M9 — Assumption B.1 fails on a real network, and that is the finding.**
+Run on a Kaggle T4, 64 samples, `google/ddpm-cifar10-32`, 3005 network calls in
+9.4 minutes plus 1104 for the five cached references. Every solver in every arm
+**loses order** against a real score:
+
+| arm/solver | theory | Tier 1 | Tier 2 | **Tier 3** |
+|---|---|---|---|---|
+| A/euler | 1 | 1.01 | 1.01 | **0.84** |
+| A/midpoint | 2 | 2.03 | 2.03 | **1.53** |
+| A/rk4 | 4 | 3.94 | 4.00 | **1.21** |
+| B/euler | 1 | 1.02 | 1.02 | **0.75** |
+| B/midpoint | 2 | 2.06 | 2.05 | **1.60** |
+| B/rk4 | 4 | 3.92 | 3.97 | **2.23** |
+| C/dpm1 | 1 | 0.99 | 1.00 | **0.81** |
+| C/dpm2 | 2 | 2.03 | 2.02 | **2.19** |
+| C/dpm3 | 3 | 3.09 | 3.08 | **2.47** |
+
+**Correction to the naive read of that table.** `fit_order` scores windows as
+`r2 + 0.01*width`, so a wide window that runs into the reference floor can
+outscore a narrower clean one --- the same failure mode M5 documented for `ab2`.
+Three Tier-3 curves reach the floor. `fit_order` now takes an optional `floor=`
+(M10), and excluding points within `3*FLOOR` before fitting gives:
+**`dpm3` 2.473 -> 2.995** (1 point dropped) and `dpm2` 2.191 -> 2.244. So
+**DPM-Solver-3 essentially holds its order against a real network** --- the one
+scheme here that does, and a result favourable to the base paper. `B/rk4` moves
+2.231 -> 1.099 but loses 2 of 8 points, leaving no clean asymptotic window;
+neither number is trustworthy for that row. The order-collapse headline is
+unaffected: the curves that drive it (`A/rk4` at 12x the floor, `B/euler` at
+42x) drop nothing and are unchanged. Both columns ship in
+`results/master_order_table.csv`.
+
+Worst `|measured − theory|` goes **0.094 (T1) → 0.084 (T2) → 2.790 (T3)**, a 33x
+degradation, with 8 of 9 fits more than 0.15 below theory. This is the project's
+sharpest result: Tiers 1–2 satisfy the paper's Assumption B.1 *exactly* (analytic
+score, derivatives continuous to order k+1) and hit theory; the network does not
+satisfy it and the order theorem's conclusion goes with it. **The higher the
+claimed order, the more is lost** — rk4 sheds 2.8 while euler sheds 0.16 — which
+is what an unsatisfied smoothness hypothesis predicts, since higher-order schemes
+lean on higher derivatives.
+
+Two more Tier-3 findings worth the report:
+
+- **Arm A vs arm B finally separates.** On the analytic tiers the two arms were
+  nearly indistinguishable in slope. On a real network arm A/rk4 measures 1.21 and
+  bottoms out at `err = 4.57`, while arm B/rk4 measures 2.23 and reaches `0.43` —
+  **10x better** at the same budget. The λ-reparameterisation, which bought almost
+  nothing on the exact-score tiers, is worth an order of magnitude here. That is
+  the A-vs-B comparison the three-arm design was built to make.
+- **The thesis sentence holds only on Tier 3.** "RK4 wins per step, loses per NFE
+  to DPM-Solver-3" is *refuted* on Tiers 1–2 (rk4 wins on both axes there) and
+  *holds* on Tier 3 for **NFE 16–120**. The analytic sweeps start past each
+  solver's pre-asymptotic region and so sit deep in the regime where rk4's `h⁴`
+  dominates; the paper's claim is about practitioner budgets. Report the band, not
+  the bare claim.
+
+**Error decomposition** (`results/tier3_decomposition.csv`): floor
+`‖ref_300 − ref_201‖ = 3.68e-1` (4.6e-2 per sample, ~8e-4 relative against
+`‖x‖ ≈ √3072` — the guide's predicted ~1e-3 float32 floor, measured); `t_end`
+truncation 1.53 / 5.43 / 11.56 for `t_end` = 2e-3 / 5e-3 / 1e-2 vs 1e-3;
+discretization (dpm3) 279.6 at 9 NFE falling to 0.373 at 120 NFE. **Every budget
+tested is still discretization-limited** — dpm3 only reaches the floor at the very
+last point — so this checkpoint at 64 samples never enters the regime where more
+NFE buys nothing. Note the truncation term at `t_end=2e-3` (1.53) already exceeds
+dpm3's error at 78 NFE (1.22): stopping early costs more than discretizing
+coarsely, which is the mechanism behind paper Table 4's 4.39 FID @ 15 NFE → 5.52
+@ 20.
+
+The design decision that made this measurable: **the
+CIFAR-10 checkpoint's schedule is the *discretised* VP-linear one and is not
+interchangeable with `src/schedule.py`** — measured on the real betas at
+`max|Δλ| = 4.741e-2` and **5.0% in `f`** (matching the synthetic-beta prediction
+in `tests/test_tier3.py` to the digit), so reusing the continuous coefficients for
+arms A/B would have put a systematic ~5% error under every Tier-3 curve. `DiscreteSchedule` therefore reads
+α, σ, λ, t(λ) straight off the checkpoint's own `NoiseScheduleVP` and gets `f`,
+`g²` from **one** central difference of λ, via the VP identity `λ' = f/σ²`:
+
+    f(t) = σ(t)² λ'(t)        g²(t) = -2σ(t)² λ'(t) = -2 f(t)
+
+Deriving both from a single FD is what makes `f/λ' ≡ σ²` hold to **1.1e-16**
+rather than approximately — which is precisely the identity that makes arm A and
+arm B the *same ODE*. `tests/test_tier3.py` checks that end to end (both arms
+integrated at four resolutions; the gap falls 2.5e-4 → 3.9e-7 monotonically).
+Note the discrete schedule's `log α` is piecewise linear, so its `f` is a
+**staircase** and the arm-A right-hand side is genuinely discontinuous at the 1000
+knots — that caps how cleanly RK4 closes the gap, and is why the test asserts
+convergence rather than a single tolerance.
+
+Two dtypes are used on purpose: **float32** for the schedule handed to
+`DPM_Solver` (it multiplies coefficients into the state, so float64 would promote
+the batch and then fail inside the float32 UNet) and **float64, on CPU** for
+`DiscreteSchedule` (λ ≈ 5 with `dt = 1e-5` is hopeless in float32 — rounding
+alone costs ~0.03 in the derivative). Both are built from the same betas.
+
+`src/solvers.py:integrate` and `src/testbeds.py:pf_rhs_*` were generalised
+(backend-agnostic state; optional `sched=`) rather than duplicated, so **the same
+integrator and the same PF-ODE definition march all three tiers** — which is the
+claim the report makes about arms A and B. Both edits are backward compatible;
+the 71 pre-existing tests were unaffected.
+
+**M10 — every verdict in the report is computed, not typed.**
+`notebooks/10_report.ipynb` runs no experiments; it reads `results/*.csv` and
+derives the master order table, the crossover summary, the predictions ledger and
+the proposal-coverage table. It degrades gracefully when Tier 3 is absent (marks
+those rows *pending*), so it was verified locally before the Kaggle run.
+
+One result worth flagging before the report is written: the guide's Part-5
+prediction *"RK4 wins on error per step and loses on error per NFE to
+DPM-Solver-3 — that is your thesis in one sentence"* comes out **refuted on the
+analytic tiers**. RK4 beats `dpm3` on *both* axes there (Tier 1 κ=10 at NFE=192:
+`4.7e-8` vs `2.3e-6`). This is not a bug: M5/M7's sweeps deliberately start past
+each solver's pre-asymptotic region, so their overlap is **NFE 64–576**, deep in
+the asymptotic regime where RK4's `h⁴` simply dominates. DPM-Solver's advantage is
+claimed at **10–20 NFE**, which those sweeps never visit. Tier 3 sweeps exactly
+that band (10–120), so it is the one place this prediction can actually be tested
+— worth stating that way in the report rather than either quietly dropping the
+prediction or claiming the analytic tiers refuted the paper.
 
 **Gotcha found in `third_party/dpm_solver_pytorch.py`:** for `schedule='linear'`,
 `NoiseScheduleVP(..., dtype=...)` is silently ignored — `get_time_steps()` builds
@@ -364,6 +576,29 @@ decomposition (discretization / `t_end` truncation / network approximation).
 
 ## 8. Gotchas already hit
 
+- **Protocols (M12/M13).** The Tier-1/2 order sweeps (notebooks 05, 07) run to
+  `t_end = 0.2` at NFE ≥ 16–64 — the *asymptotic* protocol. Tier 3 runs to
+  `t_end = 1e-3` at 9–120 NFE. Never compare slopes across the two; use
+  `results/matched_protocol_slopes.csv`, which has both.
+- `run_all.sh` was committed without the executable bit (git mode 100644), so
+  `./run_all.sh` failed on a fresh clone with "permission denied". Fixed by
+  `chmod +x` (M13).
+- Notebook 11 seeds each FID sampler with `hash(label)`; Python randomises string
+  hashes per process, so those 5k-sample sets are not bit-reproducible and differ
+  between samplers. Rankings with ≥1.5× gaps are unaffected; say so if quoting FID.
+- Notebook 11's 201-step reference cache is keyed by file name only
+  (`results/tier3_ref_s201_e1e-3.pt`, shared with notebook 09) but M11 uses a
+  seed-1 batch where M9 uses seed 0. Running 09 then 11 in one Kaggle session would
+  load the wrong reference. The committed M11 run was a fresh session (checked: its
+  errors at 120 NFE fall to 0.33–0.94, matching M9); key the cache by seed before
+  re-running.
+- clean-fid on macOS/Windows needs `num_workers=0` (its worker processes cannot
+  pickle a resize lambda under `spawn`), and SciPy 1.18 removed
+  `scipy.linalg.sqrtm(..., disp=)`, which clean-fid calls. `notebooks/11b` handles
+  both; Kaggle (Linux, older SciPy) needs neither.
+- Tectonic fetches LaTeX packages on first build; on a flaky network a single file
+  can fail (e.g. `lmcsc10.pfb`). Just re-run — downloads are cached.
+
 - Homebrew `python@3.14` is broken on macOS 26 → use `uv` + Python 3.12 (see §3).
 - The vendored solver was committed as a 15-byte `404: Not Found` stub; re-fetched
   from commit `8acf2bb`. If it looks wrong, re-run the curl in `third_party/README.md`.
@@ -376,6 +611,20 @@ decomposition (discretization / `t_end` truncation / network approximation).
   this fix and silently gets ~1e-7-floored timesteps.
 - Notebooks are committed **with** their output figures (~400 KB each). To commit
   clean: `jupyter nbconvert --clear-output --inplace notebooks/NN_*.ipynb`.
+- **Tier 3 must never import `src/arm_c.py`.** Its `torch.set_default_dtype(
+  torch.float64)` side effect would build the UNet in float64 and make
+  `get_time_steps` emit float64 grids. `src/tier3.py` imports `third_party`
+  directly and `sample_dpm_solver_t3` raises a clear error if the ambient default
+  has been changed, so this fails loudly rather than at 2 a.m.
+- **`t_end` on Tier 3 cannot go below `1/total_N` = 1e-3.** The discrete schedule
+  tabulates `t` on `linspace(0,1,1001)[1:]`; below the floor `inverse_lambda`
+  extrapolates off the table. The paper's ε = 1e-4 row of Table 6 is therefore not
+  reachable with this checkpoint, and M9's truncation study sweeps `t_end` *down
+  toward* the floor instead of past it.
+- `NoiseScheduleVP('discrete', ...)` silently truncates the beta array via
+  `numerical_clip_alpha` if λ(T) < −5.1. For this checkpoint λ(T) ≈ −5.06, *just*
+  inside — but a clip would move `t_0 = 1/total_N` without warning, so notebook 09
+  asserts `ns.total_N == 1000`.
 - Notebook path bootstrap (works from anywhere in the repo):
   ```python
   import sys, pathlib

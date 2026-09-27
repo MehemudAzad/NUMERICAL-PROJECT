@@ -1,0 +1,13 @@
+component,setting,value
+network+precision floor,||ref_300 - ref_201||,0.3683716398470721
+t_end truncation,t_end=0.002 vs 1e-3,1.5334946375303375
+t_end truncation,t_end=0.005 vs 1e-3,5.43244069093604
+t_end truncation,t_end=0.01 vs 1e-3,11.557652276072016
+"discretization (arm C, dpm3)",nfe=9,279.56747445893336
+"discretization (arm C, dpm3)",nfe=12,103.76800277417908
+"discretization (arm C, dpm3)",nfe=15,46.264451272044255
+"discretization (arm C, dpm3)",nfe=18,24.32695249518877
+"discretization (arm C, dpm3)",nfe=30,5.030425292226854
+"discretization (arm C, dpm3)",nfe=48,1.996325157932885
+"discretization (arm C, dpm3)",nfe=78,1.221815521461025
+"discretization (arm C, dpm3)",nfe=120,0.3726191203529986

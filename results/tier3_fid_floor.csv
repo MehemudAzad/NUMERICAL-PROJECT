@@ -1,0 +1,11 @@
+n_samples,seed,fid,source,method
+1000,0,31.0,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+1000,1,30.63,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+1000,2,30.74,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+2000,0,14.81,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+2000,1,14.54,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+2000,2,14.53,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+5000,0,5.87,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+5000,1,5.87,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+5000,2,5.82,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
+10000,0,3.15,"Hugging Face uoft-cs/cifar10, test split","clean-fid CIFAR-10 train stats, legacy_tensorflow (values transcribed from the executed notebook's printed output, 2 d.p.)"
