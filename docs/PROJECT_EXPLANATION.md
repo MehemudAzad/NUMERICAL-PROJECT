@@ -194,13 +194,98 @@ Error of arm A (uniform in $t$) divided by arm B (uniform in $\lambda$) at the l
 
 ---
 
-## 6. Cheat-Sheet: 30-Second Viva / Exam Answer
+## 6. The Complete Milestones Journey: From M0 to M13
+
+The project was executed in two major phases, with all 14 milestones (M0 through M13) fully completed, scientifically verified, and tested.
+
+```
+       Phase 1: M0–M10 (Core Engine & Initial Benchmarks)
+   ┌───────────────────────────────────────────────────────────┐
+   │ M0-M4: Scaffold, Schedule, Testbeds, Solvers, Gate G1     │
+   │ M5-M8: Convergence Order, Stability, Curvature, Crossover │
+   │ M9-M10: Tier-3 GPU Run & Initial Report                   │
+   └─────────────────────────────┬─────────────────────────────┘
+                                 │ Peer Review
+                                 ▼
+       Phase 2: M11–M13 (Post-Review Controls & Visual Proof)
+   ┌───────────────────────────────────────────────────────────┐
+   │ M11: Visual Image Grid, DPM-fast, FID vs L2 Inversion     │
+   │ M12: Matched Protocol Controls, Real Stability, Split Map │
+   │ M13: FID Floor Analysis, Final 826-Line Report & Ledger   │
+   └───────────────────────────────────────────────────────────┘
+```
+
+### Phase 1: Core Numerical Engine & Initial Benchmarks (M0–M10)
+* **M0 (Scaffold):** Repository structure, test harness, results schema, and vendored original DPM-Solver code.
+* **M1 (Noise Schedule):** VP linear noise schedule implementation and analytical mapping $\lambda \leftrightarrow t$.
+* **M2 (Tier 1 Testbed):** Exact closed-form anisotropic Gaussian testbed with analytical ground truth.
+* **M3 (Solvers):** Classical steppers (Euler, Midpoint RK2, Heun RK3, RK4, AB2) in time $t$ (Arm A) and $\lambda$ (Arm B).
+* **M4 (DPM-Solver & Gate G1):** Wrapped DPM-Solver (Arm C). Verified **Gate G1**: DDIM and DPM-Solver-1 are identical to $5.5 \times 10^{-16}$.
+* **M5 (Convergence Order):** Automatic log-log order fitting pipeline; confirmed asymptotic orders on Tier 1.
+* **M6 (Stiffness & Stability):** Condition number sweep $\kappa \in [1, 10^4]$ on linear Gaussian.
+* **M7 (Tier 2 Testbed):** 8-mode nonlinear Swiss-Roll Gaussian mixture referenced against SciPy DOP853 at $10^{-13}$ tolerance.
+* **M8 (Step-Size Crossover):** Analytical crossover study ($h^*$) between DPM-Solver-1 and DPM-Solver-3.
+* **M9 (Tier 3 CIFAR-10 Run):** First neural network evaluation on Kaggle T4 GPU using `google/ddpm-cifar10-32`.
+* **M10 (Report & Synthesis):** Synthesis notebook, LaTeX report drafting, and automated pipeline verification (`run_all.sh`).
+
+---
+
+### Phase 2: Post-Review Rigorous Controls & Ground-Truth Verification (M11–M13)
+A peer review of M0–M10 revealed that some conclusions compared asymptotic settings with practitioner settings. M11–M13 established strict, like-for-like scientific controls:
+
+#### 🖼️ Milestone 11: Real Samples & The FID Anchor (Kaggle T4 GPU)
+* **Notebook:** `notebooks/11_samples_fid.ipynb` (executed on Kaggle T4 GPU).
+* **Deliverables & Discoveries:**
+  * Generated the project's first visual samples (`figures/11_samples_grid.png`).
+  * Implemented and benchmarked `DPM-Solver-fast` (the adaptive hybrid solver actually used in practice).
+  * Evaluated 5,000 samples across 12 configurations using `clean-fid`.
+  * **The $L_2$ vs. FID Inversion:** At $\sim 10$ NFE, visual quality (FID) ranks: $\text{DPM-2} (24.9) < \text{DPM-fast} (31.3) < \text{DDIM} (39.5) < \text{DPM-1} (44.9) < \text{DPM-3} (143)$. However, mathematical distance to the converged image ($L_2$) ranks them in the **exact reverse order** (rank correlation $-1.00$)! DPM-2 produces a sharp image that looks great to a human, but it diverges from the true ODE path!
+
+#### 🔬 Milestone 12: Controlled Scientific Experiments (Laptop CPU)
+* **Notebook:** `notebooks/12_controls.ipynb` (CPU-only, fully automated).
+* **Sub-Milestones & Discoveries:**
+  * **12.1 (Matched Protocol):** Re-ran Tiers 1 & 2 using Tier 3's exact settings ($t_{\text{end}}=10^{-3}$, low NFEs). Proved that 68% of the "order collapse" happens on pure math without any neural network due to pre-asymptotic step sizes.
+  * **12.2 (Nonlinear Stability):** Measured the true stability limit on Tier 2: RK4 in time $t$ blows up ($h_{\max} = 0.1998$, diverging below 5 steps), while RK4 in $\lambda$ stays completely stable.
+  * **12.3 (Matched-NFE Crossover):** Compared solvers at equal computational budget (NFE). Proved DPM-3 beats DPM-1 at $\text{NFE} \approx 5$ (Tier 1), $9$–$17$ (Tier 2), and $\mathbf{14.1}$ (Tier 3), confirming the base paper's anomaly.
+  * **12.4 (When the Split Helps):** Swept data variance $s \in [10^{-4}, 1]$. Proved DPM-Solver's exponential integrator beats classical RK on concentrated data ($s \to 0$, like real image manifolds), but loses on spread-out data ($s \to 1$).
+
+#### 📊 Milestone 13: FID Floor Analysis & Final Report Synthesis
+* **Notebooks:** `notebooks/11b_fid_floor.ipynb` and `notebooks/10_report.ipynb`.
+* **Deliverables & Discoveries:**
+  * **FID Sample-Size Floor:** Modeled the finite-sample bias of FID ($\text{FID} \approx 30,453 / N$), proving that sample size explains 47% of the absolute gap between our 5k run and the paper's 50k run, while preserving rankings perfectly.
+  * **Predictions Ledger (`results/predictions_ledger.csv`):** All 14 hypotheses updated and backed strictly by data (confirmed, narrowed, or clarified).
+  * **Full LaTeX Report (`report/main.tex` & `report/main.pdf`):** Completely updated with all M11–M13 findings, matched tables, and dual-axis conclusions.
+
+---
+
+### Complete Milestone Status Table
+
+| Milestone | Description | Environment | Status |
+| :--- | :--- | :--- | :---: |
+| **M0** | Scaffold, test harness, results schema, vendored code | Local CPU | ✅ Done |
+| **M1** | Noise schedule & analytical $\lambda \leftrightarrow t$ mapping | Local CPU | ✅ Done |
+| **M2** | Tier 1 anisotropic Gaussian exact testbed | Local CPU | ✅ Done |
+| **M3** | Solvers in time $t$ (Arm A) and $\lambda$ (Arm B) | Local CPU | ✅ Done |
+| **M4** | DPM-Solver wrapper (Arm C) & Gate G1 ($5.5 \times 10^{-16}$) | Local CPU | ✅ Done |
+| **M5** | Automatic order fitting pipeline & Tier 1 convergence | Local CPU | ✅ Done |
+| **M6** | Stiffness sweep ($\kappa \in [1, 10^4]$) & stability envelope | Local CPU | ✅ Done |
+| **M7** | Tier 2 Gaussian mixture & DOP853 reference ($10^{-13}$) | Local CPU | ✅ Done |
+| **M8** | Step-size crossover analysis ($h^*$) | Local CPU | ✅ Done |
+| **M9** | Tier 3 CIFAR-10 real UNet evaluation | Kaggle T4 GPU | ✅ Done |
+| **M10** | Synthesis notebook & report tables | Local CPU | ✅ Done |
+| **M11** | Samples grid, DPM-fast & 5k-FID anchor (`notebooks/11_samples_fid.ipynb`) | Kaggle T4 GPU | ✅ Done |
+| **M12** | Matched protocol, Tier-2 stability & split analysis (`notebooks/12_controls.ipynb`) | Local CPU | ✅ Done |
+| **M13** | FID floor analysis (`notebooks/11b_fid_floor.ipynb`), LaTeX report & ledger finalized | Local CPU | ✅ Done |
+
+---
+
+## 7. Cheat-Sheet: 30-Second Viva / Exam Answer
 
 If your instructor or examiner asks: **"What did you do in this project and what did you find?"**
 
 > *"Diffusion models generate images by integrating an initial-value ODE, where each step requires an expensive neural network forward pass. The base NeurIPS 2022 paper (DPM-Solver) claimed fast high-order sampling, but only tested image quality using FID.*
 >
-> *In this project, we performed a formal numerical-analysis audit. We tested convergence order, boundary stiffness stability, and error per NFE across three controlled tiers: an exact anisotropic Gaussian, a nonlinear Gaussian mixture, and a real CIFAR-10 UNet.*
+> *In this project, we performed a formal numerical-analysis audit across 14 systematic milestones (M0–M13). We tested convergence order, boundary stiffness stability, and error per NFE across three controlled tiers: an exact anisotropic Gaussian, a nonlinear Gaussian mixture, and a real CIFAR-10 UNet.*
 >
 > *Our key findings were:*
 > 1. *DPM-Solver achieves its theoretical order under the assumptions the proof actually needs — a smooth score, matched to the step-size range being fit. Most of what looks like "order collapse" on the real network is already present with an exact score, once Tiers 1–2 are measured at the network's own practitioner NFE budgets rather than an easier asymptotic range; the network then makes it moderately worse on top.*
