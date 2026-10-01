@@ -1,0 +1,194 @@
+% ---------------------------------------------------------------------
+% References for A_03.pdf (CSE 402 final report, Section A, Group 03)
+% ---------------------------------------------------------------------
+
+@inproceedings{lu2022dpmsolver,
+  author    = {Lu, Cheng and Zhou, Yuhao and Bao, Fan and Chen, Jianfei and Li, Chongxuan and Zhu, Jun},
+  title     = {{DPM-Solver}: A Fast {ODE} Solver for Diffusion Probabilistic Model Sampling in Around 10 Steps},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {35},
+  pages     = {5775--5787},
+  publisher = {Curran Associates, Inc.},
+  address   = {Red Hook, NY, USA},
+  year      = {2022},
+  note      = {arXiv:2206.00927}
+}
+
+@misc{lu2022code,
+  author       = {Lu, Cheng and others},
+  title        = {{DPM-Solver}: official {PyTorch} implementation},
+  howpublished = {\url{https://github.com/LuChengTHU/dpm-solver}},
+  year         = {2022},
+  note         = {File \texttt{dpm\_solver\_pytorch.py}, vendored unmodified at a pinned commit, MIT licence}
+}
+
+@inproceedings{ho2020ddpm,
+  author    = {Ho, Jonathan and Jain, Ajay and Abbeel, Pieter},
+  title     = {Denoising Diffusion Probabilistic Models},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {33},
+  pages     = {6840--6851},
+  publisher = {Curran Associates, Inc.},
+  address   = {Red Hook, NY, USA},
+  year      = {2020}
+}
+
+@inproceedings{song2021sde,
+  author    = {Song, Yang and Sohl-Dickstein, Jascha and Kingma, Diederik P. and Kumar, Abhishek and Ermon, Stefano and Poole, Ben},
+  title     = {Score-Based Generative Modeling through Stochastic Differential Equations},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  publisher = {OpenReview.net},
+  address   = {Virtual},
+  year      = {2021}
+}
+
+@inproceedings{song2021ddim,
+  author    = {Song, Jiaming and Meng, Chenlin and Ermon, Stefano},
+  title     = {Denoising Diffusion Implicit Models},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  publisher = {OpenReview.net},
+  address   = {Virtual},
+  year      = {2021}
+}
+
+@article{hochbruck2010exponential,
+  author  = {Hochbruck, Marlis and Ostermann, Alexander},
+  title   = {Exponential Integrators},
+  journal = {Acta Numerica},
+  volume  = {19},
+  pages   = {209--286},
+  year    = {2010}
+}
+
+@book{hairer1993solving,
+  author    = {Hairer, Ernst and N{\o}rsett, Syvert P. and Wanner, Gerhard},
+  title     = {Solving Ordinary Differential Equations {I}: Nonstiff Problems},
+  edition   = {2nd},
+  publisher = {Springer},
+  address   = {Berlin},
+  year      = {1993}
+}
+
+@book{hairer1996solving,
+  author    = {Hairer, Ernst and Wanner, Gerhard},
+  title     = {Solving Ordinary Differential Equations {II}: Stiff and Differential-Algebraic Problems},
+  edition   = {2nd},
+  publisher = {Springer},
+  address   = {Berlin},
+  year      = {1996}
+}
+
+@article{dormand1980family,
+  author  = {Dormand, John R. and Prince, Peter J.},
+  title   = {A Family of Embedded {Runge--Kutta} Formulae},
+  journal = {Journal of Computational and Applied Mathematics},
+  volume  = {6},
+  number  = {1},
+  pages   = {19--26},
+  year    = {1980}
+}
+
+@book{butcher2016numerical,
+  author    = {Butcher, John C.},
+  title     = {Numerical Methods for Ordinary Differential Equations},
+  edition   = {3rd},
+  publisher = {Wiley},
+  address   = {Chichester, UK},
+  year      = {2016}
+}
+
+@inproceedings{heusel2017fid,
+  author    = {Heusel, Martin and Ramsauer, Hubert and Unterthiner, Thomas and Nessler, Bernhard and Hochreiter, Sepp},
+  title     = {{GANs} Trained by a Two Time-Scale Update Rule Converge to a Local {Nash} Equilibrium},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {30},
+  pages     = {6626--6637},
+  publisher = {Curran Associates, Inc.},
+  address   = {Red Hook, NY, USA},
+  year      = {2017}
+}
+
+@inproceedings{parmar2022cleanfid,
+  author    = {Parmar, Gaurav and Zhang, Richard and Zhu, Jun-Yan},
+  title     = {On Aliased Resizing and Surprising Subtleties in {GAN} Evaluation},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  publisher = {IEEE},
+  address   = {New Orleans, LA, USA},
+  pages     = {11410--11420},
+  year      = {2022}
+}
+
+@techreport{krizhevsky2009cifar,
+  author      = {Krizhevsky, Alex},
+  title       = {Learning Multiple Layers of Features from Tiny Images},
+  institution = {University of Toronto},
+  year        = {2009}
+}
+
+@misc{ddpmcifar10checkpoint,
+  author       = {{Google}},
+  title        = {{ddpm-cifar10-32}: {DDPM} checkpoint trained on {CIFAR-10}},
+  howpublished = {\url{https://huggingface.co/google/ddpm-cifar10-32}},
+  year         = {2022},
+  note         = {Hugging Face model hub; port of the checkpoint released with Ho et al. (2020)}
+}
+
+@misc{vonplaten2022diffusers,
+  author       = {von Platen, Patrick and Patil, Suraj and Lozhkov, Anton and Cuenca, Pedro and Lambert, Nathan and Rasul, Kashif and Davaadorj, Mishig and Wolf, Thomas},
+  title        = {Diffusers: State-of-the-Art Diffusion Models},
+  howpublished = {\url{https://github.com/huggingface/diffusers}},
+  year         = {2022}
+}
+
+@inproceedings{paszke2019pytorch,
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam and Bradbury, James and Chanan, Gregory and others},
+  title     = {{PyTorch}: An Imperative Style, High-Performance Deep Learning Library},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {32},
+  pages     = {8024--8035},
+  publisher = {Curran Associates, Inc.},
+  address   = {Red Hook, NY, USA},
+  year      = {2019}
+}
+
+@article{virtanen2020scipy,
+  author  = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and others},
+  title   = {{SciPy} 1.0: Fundamental Algorithms for Scientific Computing in {Python}},
+  journal = {Nature Methods},
+  volume  = {17},
+  pages   = {261--272},
+  year    = {2020}
+}
+
+@article{harris2020numpy,
+  author  = {Harris, Charles R. and Millman, K. Jarrod and van der Walt, St{\'e}fan J. and others},
+  title   = {Array Programming with {NumPy}},
+  journal = {Nature},
+  volume  = {585},
+  pages   = {357--362},
+  year    = {2020}
+}
+
+@article{elfwing2018silu,
+  author  = {Elfwing, Stefan and Uchibe, Eiji and Doya, Kenji},
+  title   = {Sigmoid-Weighted Linear Units for Neural Network Function Approximation in Reinforcement Learning},
+  journal = {Neural Networks},
+  volume  = {107},
+  pages   = {3--11},
+  year    = {2018}
+}
+
+@misc{kaggle,
+  author       = {{Kaggle}},
+  title        = {Kaggle Notebooks (free {NVIDIA} {T4} {GPU} runtime)},
+  howpublished = {\url{https://www.kaggle.com/code}},
+  year         = {2026},
+  note         = {Used for all Tier-3 runs}
+}
+
+@misc{ourrepo,
+  author       = {{CSE 402 Section A, Group 03}},
+  title        = {Order, cost and stability in diffusion sampling: code, notebooks and results},
+  howpublished = {\url{https://github.com/MehemudAzad/NUMERICAL-PROJECT}},
+  year         = {2026}
+}
