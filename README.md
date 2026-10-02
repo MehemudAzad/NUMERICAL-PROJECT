@@ -185,7 +185,7 @@ latexmk -pdf A_03.tex            # or, without a TeX install: tectonic -X compil
 | **Mehemud Azad** | 2105014 | project lead and integration; planned all seven experiments; project setup, noise schedule, Gaussian testbed; report writing; FID floor |
 | **Sayjad Rahman** | 2105021 | classical solvers, DPM-Solver and DDIM, samples and FID, control experiments |
 | **Gourove Roy** | 2105017 | Tier 3 on the real network, shared engine, report tables, reproducibility, reports |
-| **Khalid Hasan Tuhin** | 2105002 | selected the project idea; mixture testbed and reference solution, crossover study |
+| **Khalid Hasan Tuhin** | 2105002 | selected the project idea; Tier-2 mixture testbed and DOP853 reference (used by every Tier-2 result), Tier-2 convergence, crossover study |
 | **Niloy Das Robin** | 2105019 | order fitting, Tier-1 convergence, stability analysis |
 
 Each piece of work was committed by the member who built it; `git shortlog -sn` lists commits per
@@ -230,9 +230,12 @@ member (Niloy's commits appear as `BALLISTICrobin`).
 <details open>
 <summary><b>Khalid Hasan Tuhin</b> · 2105002</summary>
 
-- **Project idea.** Selected the project's topic at the start.
-- The Tier-2 point-mixture testbed and its DOP853 reference trajectory (`src/testbeds.py`, notebook 07).
-- The crossover study that locates where DPM-Solver-3 overtakes DPM-Solver-1 (`src/crossover.py`, notebook 08).
+- **Project idea.** Selected the project's topic at the start: a numerical analysis of DPM-Solver as an ODE solver.
+- **Tier-2 testbed.** Designed and built `MixtureTier2` (`src/testbeds.py`): data on K points, so the score stays exact while the posterior mean becomes a softmax over the modes and the probability-flow ODE turns nonlinear. Built `mog8`, 8 modes on a Swiss-roll curve (`swiss_roll`). Every Tier-2 result in the report runs on it: the order tables, the curved-problem stability limit, the λ change of variable and the crossover.
+- **Reference solution.** `dop853_reference`, a batched SciPy DOP853 integration at rtol 10⁻¹³ that stands in for the closed-form trajectory Tier 2 does not have, with a convergence check against a rerun at a tighter tolerance.
+- **Tier-2 convergence experiment.** Measured every solver's order on the curved testbed with the same sweep as Tier 1, so any change in order comes from curvature (notebook 07, `results/tier2_order.csv`).
+- **Crossover study.** The crossing finder in `src/crossover.py`, which interpolates both error curves in log-log space and reports every sign change; the matched-NFE crossover in notebook 12 reuses it. The equal-step-size crossover (notebook 08, `results/crossover_sweep.csv`), which found the crossing flat at 4.4 to 5.0 NFE across five decades of κ on Tier 1 and at 8.9 NFE on Tier 2.
+- **Tests.** `tests/test_tier2.py` and `tests/test_crossover.py` (20 tests).
 
 </details>
 
