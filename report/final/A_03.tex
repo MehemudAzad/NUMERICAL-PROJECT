@@ -1148,9 +1148,22 @@ clean clone. The Tier-3 notebooks run on a Kaggle T4.
   crossover study: the crossing finder that the matched-\NFE\ crossover reuses, and
   the equal-step-size crossover on Tier 1 across five decades of $\kappa$ and on
   Tier 2.
-\item \textbf{Niloy Das Robin} (2105019): the sliding-window order fitter and the
-  Tier-1 convergence experiment; the bisection for the largest stable step and the
-  $\kappa$-sweep stability study.
+\item \textbf{Niloy Das Robin} (2105019): the order-measurement and stability
+  tools, and the Tier-1 studies built on them.
+
+  \smallskip\noindent \emph{Order.} The sliding-window order fitter, which finds the asymptotic part
+  of a convergence curve on its own and reports the slope, fit window and $R^2$;
+  the Tier-1 convergence experiment over all fourteen solvers in the three arms
+  (Section~\ref{sec:order}, Figure~\ref{fig:errh}).
+
+  \smallskip\noindent \emph{Stability.} The divergence test and the bisection for the largest stable
+  step, validated against a linear ODE with a known stability threshold; the
+  $\kappa$-sweep stability study, with a stress test to $\kappa=10^8$ and
+  $\tend=10^{-6}$.
+
+  \smallskip\noindent \emph{Analysis.} The explanation of why the linear testbed never destabilises:
+  the stability product $h\,J(\tend+h)$ stays below about 0.9, under explicit
+  Euler's threshold of 2 (Section~\ref{sec:stability}).
 \end{itemize}
 
 \end{document}

@@ -186,7 +186,7 @@ latexmk -pdf A_03.tex            # or, without a TeX install: tectonic -X compil
 | **Sayjad Rahman** | 2105021 | classical solvers, DPM-Solver and DDIM, samples and FID, control experiments |
 | **Gourove Roy** | 2105017 | Tier 3 on the real network, shared engine, report tables, reproducibility, reports |
 | **Khalid Hasan Tuhin** | 2105002 | selected the project idea; Tier-2 mixture testbed and DOP853 reference (used by every Tier-2 result), Tier-2 convergence, crossover study |
-| **Niloy Das Robin** | 2105019 | order fitting, Tier-1 convergence, stability analysis |
+| **Niloy Das Robin** | 2105019 | sliding-window order fitter, Tier-1 convergence, stability tools and the κ-sweep stability study |
 
 Each piece of work was committed by the member who built it; `git shortlog -sn` lists commits per
 member (Niloy's commits appear as `BALLISTICrobin`).
@@ -242,8 +242,11 @@ member (Niloy's commits appear as `BALLISTICrobin`).
 <details open>
 <summary><b>Niloy Das Robin</b> · 2105019</summary>
 
-- The sliding-window order fitter (`src/metrics.py`) and the Tier-1 convergence experiment (notebook 05).
-- The bisection test for the largest stable step size and the κ-sweep stability envelope (`src/stability.py`, notebook 06).
+- **Order fitter.** The sliding-window order fitter `fit_order` (`src/metrics.py`): it fits every contiguous window of the log-log error curve and keeps the straightest wide one, so it finds the asymptotic region on its own and reports slope, fit window and R². Later reused on Tier 2, on Tier 3 and in the report tables.
+- **Tier-1 convergence experiment.** Measured the order of all fourteen solvers in the three arms on the Gaussian testbed: every one within 0.1 of theory (notebook 05, `results/tier1_order.csv`).
+- **Stability tools.** The divergence test and the bisection for the largest stable step, `max_stable_h` (`src/stability.py`), validated against a linear ODE with a known stability threshold. Later reused unchanged for the curved-problem stability limit.
+- **Stability study.** The κ-sweep stability envelope over five steppers and two arms, with a stress test to κ = 10⁸ and t_end = 10⁻⁶, and the explanation of why the linear testbed never destabilises: the stability product h·J(t_end + h) stays below about 0.9, under explicit Euler's threshold of 2 (notebook 06, `results/stability_envelope.csv`).
+- **Tests.** `tests/test_metrics.py` and `tests/test_stability.py` (11 of their 14 tests).
 
 </details>
 
