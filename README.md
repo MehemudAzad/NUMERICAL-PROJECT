@@ -1,148 +1,255 @@
+<div align="center">
+
 # Order, Cost & Stability in Diffusion Sampling
 
-CSE-402 (Numerical Analysis, Simulation & Modeling) course project,
-**Section A, Group 03**.
+**A numerical-analysis audit of DPM-Solver**
+
+CSE 402 · Numerical Analysis, Simulation & Modeling · BUET · **Section A, Group 03**
+
+[![Report](https://img.shields.io/badge/report-A__03.pdf-B31B1B)](report/final/A_03.pdf)
+[![Base paper](https://img.shields.io/badge/arXiv-2206.00927-B31B1B)](https://arxiv.org/abs/2206.00927)
+![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.14-EE4C2C?logo=pytorch&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-129%20passing-2EA043)
+
+</div>
 
 > [!IMPORTANT]
-> **For evaluators:** each member's individual contribution is listed in
-> **[Member contributions](#member-contributions)** directly below.
-> The submitted report is **[`report/final/A_03.pdf`](report/final/A_03.pdf)**.
+> **For evaluators:** the submitted report is **[`report/final/A_03.pdf`](report/final/A_03.pdf)**,
+> and each member's contribution is listed under **[Team and contributions](#team-and-contributions)**.
 
-Diffusion image sampling is an initial-value problem: you integrate the
-probability-flow ODE from noise to data, one expensive network call per step.
-This project judges the solvers by numerical-analysis standards — **convergence
-order**, **stability limit near the stiff boundary**, and **cost per function
-evaluation (NFE)** — rather than by image-quality scores (FID).
+## Overview
 
-Base paper: Lu et al., *DPM-Solver: A Fast ODE Solver for Diffusion Probabilistic
-Model Sampling in Around 10 Steps*, NeurIPS 2022 (arXiv:2206.00927).
-The authoritative implementation plan is **`docs/cse402_guide.html`** (12 steps).
+A diffusion model makes an image by solving an ODE: start from pure noise and
+integrate the *probability-flow ODE* back to data, with one call to a large
+neural network at every step. DPM-Solver ([Lu et al., NeurIPS 2022](https://arxiv.org/abs/2206.00927))
+cut the number of calls from hundreds to 10–20, and its authors judged it by
+FID, an image-quality score.
 
-## Member contributions
+We judge it the way numerical analysis judges any ODE solver:
 
-The project was split into milestones (M0 to M13), and each milestone was built,
-tested and committed by one member. The table follows the git history, so any row
-can be checked with `git log --author="<name>"`.
+- **Order:** does the error shrink at the textbook rate as the step shrinks?
+- **Stability:** do large steps blow up near the data end, where the ODE stiffens?
+- **Cost:** which solver is most accurate for a fixed number of network calls (NFE)?
 
-| Member | Student ID | Milestones | What they built |
-|---|---|---|---|
-| **Mehemud Azad** | 2105014 | M0, M1, M2, M13 | Project setup: repository layout, the shared results schema (`src/runlog.py`), test wiring and the vendored DPM-Solver code (`third_party/`). The VP-linear noise schedule and λ ↔ t conversion (`src/schedule.py`, notebook 01). The Tier-1 Gaussian testbed with its exact score and closed-form trajectory (`src/testbeds.py`, notebook 02). The project plan and documentation in `docs/`, including the M11 to M13 correction plan after the internal review. M13: the rewritten conclusions in `report/main.tex` and the FID sample-size floor experiment (notebook 11b). Presentation slides. |
-| **Sayjad Rahman** | 2105021 | M3, M4, M11, M12 | The classical solvers (Euler, RK2, RK3, RK4, AB2) and the shared integrator with measured NFE (`src/solvers.py`), plus the λ-uniform grids (`src/grids.py`, notebook 03). DPM-Solver-1 and DDIM written by hand, the wrapper around the authors' DPM-Solver code, and Gate G1 (`src/dpm.py`, `src/arm_c.py`, notebook 04). M11: generated sample images and FID on Kaggle (`src/imaging.py`, notebook 11). M12: the control experiments (matched protocol, Tier-2 stability, matched-NFE crossover, when the exact linear split helps; notebook 12). |
-| **Niloy Das Robin** | 2105019 | M5, M6 | The sliding-window order fitter (`src/metrics.py`) and the Tier-1 convergence experiment (notebook 05). The bisection test for the largest stable step size and the κ-sweep stability envelope (`src/stability.py`, notebook 06). |
-| **Khalid Hasan Tuhin** | 2105002 | M7, M8 | The Tier-2 point-mixture testbed and its DOP853 reference trajectory (`src/testbeds.py`, notebook 07). The crossover study that locates where DPM-Solver-3 overtakes DPM-Solver-1 (`src/crossover.py`, notebook 08). |
-| **Gourove Roy** | 2105017 | M9, M10 | **Notebooks: [`09_tier3_cifar10.ipynb`](notebooks/09_tier3_cifar10.ipynb) and [`10_report.ipynb`](notebooks/10_report.ipynb)**<br><br>• **M9, Tier 3 on the real network.** Built `src/tier3.py`, which runs every solver on the CIFAR-10 DDPM network using the checkpoint's own discrete noise schedule, and ran it on a Kaggle T4. **Notebook 09** measures error against NFE for all nine solver and arm combinations, caches the reference runs, measures the reference's own error floor, and splits Tier-3 error into discretisation, `t_end` truncation and that floor. Outputs: `results/tier3_error.csv`, `results/tier3_decomposition.csv`, `figures/09_tier3_error_vs_nfe.png`, `figures/09_tier3_decomposition.png`.<br>• **Shared engine.** Made the integrator work on GPU tensors as well as NumPy arrays (`src/solvers.py`) and let the ODE take a schedule object (`src/testbeds.py`), so the same code runs all three tiers. Tests: `tests/test_tier3.py`.<br>• **M10, reporting.** **Notebook 10** builds the master order table, the crossover summary, the predictions ledger and the proposal-coverage table directly from the results files (`results/master_order_table.csv`, `predictions_ledger.csv`, `proposal_coverage.csv`, `crossover_summary.csv`; figures `10_error_vs_nfe_all.png`, `10_efficiency_frontier.png`). M13 later added its sections 6b and 6c. Tests: `tests/test_report.py`. Added the floor-aware order fit to `src/metrics.py`.<br>• **Reproducibility.** Wrote `run_all.sh` and ran it end to end; the regenerated results matched the committed ones to 1.8×10⁻¹⁵.<br>• **Reports.** The first LaTeX report (`report/main.tex`, later rewritten in M13) and the submitted ACM report [`report/final/A_03.pdf`](report/final/A_03.pdf). |
-
-## Three arms
-
-| Arm | What it integrates | Grid |
-|-----|--------------------|------|
-| A   | raw probability-flow ODE in `t`         | uniform in `t` |
-| B   | the same ODE reparameterised in `λ` (half log-SNR) | uniform in `λ` |
-| C   | DPM-Solver 1/2/3 — exact on the linear part | uniform in `λ` |
-
-A vs B isolates the reparameterisation; B vs C isolates the exact linear treatment.
-Arm C uses the authors' own code (`third_party/dpm_solver_pytorch.py`) driven by an
-analytic noise oracle, so Tiers 1–2 test the published implementation with zero
-model error.
-
-## Three tiers
-
-| Tier | Testbed | Reference answer | Measures | Where it runs |
-|------|---------|------------------|----------|---------------|
-| 1 | anisotropic Gaussian, sweep κ = s_max/s_min | closed-form algebra | stability limits | laptop (CPU) |
-| 2 | Gaussian / point mixture | DOP853, rtol 1e-13 | order under curvature | laptop (CPU) |
-| 3 | real CIFAR-10 DDPM UNet (`google/ddpm-cifar10-32`) | fine-grid, same net | survival vs a real network | Kaggle T4 GPU |
-
-## Layout
-
-```
-src/          pure-python engine (no GPU, no plotting) — unit-tested
-tests/        pytest suite; Gate G1 lives here
-notebooks/    one .ipynb per milestone — imports src/, writes results/ + figures/
-third_party/  vendored DPM-Solver (unmodified, pinned commit, MIT — see its README)
-results/      git-tracked CSVs (schema: src/runlog.py). Big *.pt/*.npz are gitignored
-figures/      git-tracked PNGs
-docs/         the guide, the proposal deck, the paper
-run_all.sh    reproduces every figure and CSV from a clean clone
-report/       working report (main.tex); report/final/A_03.pdf is the submitted
-              report in ACM format (`cd report/final && latexmk -pdf A_03.tex`)
+```mermaid
+flowchart LR
+    N["x(1) ~ N(0, I)<br/>pure noise"] --> S{{"ODE solver<br/>arm A · B · C"}}
+    E["noise predictor ε(x, t)<br/>exact formula or CIFAR-10 UNet"] -.-> S
+    S --> X["x(t_end)<br/>sample"]
+    X --> M["error"]
+    R["reference answer<br/>closed form · DOP853 · 201-step run"] --> M
+    M --> O["order · stability · error per NFE"]
 ```
 
-## Setup
+## Key findings
 
-Tiers 1 & 2 are CPU-only NumPy and run on any laptop.
-
-```bash
-# This Mac: Homebrew python@3.14 is broken on macOS 26 (pyexpat/pip), so use uv:
-uv venv --python 3.12 .venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
-
-# A normal machine:
-python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-```
-
-Run the tests from the repo root:
-
-```bash
-python -m pytest          # 129 passed
-```
-
-Reproduce every figure and results CSV from a clean clone:
-
-```bash
-./run_all.sh              # tests, then notebooks 01–08, 12, and 10
-./run_all.sh --tests-only # just the suite
-```
-
-`run_all.sh` deliberately skips notebooks 09, 11 and 11b — they need a CUDA GPU
-and run on a Kaggle T4 (Internet ON, Accelerator T4 ×1). Their outputs are
-committed, so the report notebook reads them without a GPU present.
-
-## Milestone status
-
-| # | Milestone | State |
-|---|-----------|-------|
-| M0 | Scaffold: layout, vendored solver, results schema, tests wired | ✅ done |
-| M1 | `src/schedule.py` — noise schedule (VP linear), λ ↔ t | ✅ done |
-| M2 | `src/testbeds.py` — Tier-1 Gaussian + exact-solution test | ✅ done |
-| M3 | `src/solvers.py` (arm A) + `src/grids.py` (arm B) | ✅ done |
-| M4 | `src/dpm.py` (arm C) + authors'-code wrapper + **Gate G1** | ✅ done |
-| M5 | `src/metrics.py` order fitter + Tier-1 convergence experiment | ✅ done |
-| M6 | `src/stability.py` + κ-sweep stability envelope | ✅ done |
-| M7 | Tier-2 mixture testbed + reference + order under curvature | ✅ done |
-| M8 | Crossover study (h\* where order-3 overtakes order-1) | ✅ done |
-| M9 | Tier-3 CIFAR-10 Kaggle notebook (`src/tier3.py`, notebook 09) | ✅ done |
-| M10 | Final figures, `run_all.sh`, report tables (notebook 10) | ✅ done |
-| M11 | Samples + FID anchor (`src/imaging.py`, notebook 11) | ✅ done (Kaggle run complete) |
-| M12 | Controls on the analytic tiers (notebook 12) | ✅ done |
-| M13 | Rewrite the conclusions to match M11+M12: ledger, report, docs; FID floor (notebook 11b) | ✅ done |
-
-Milestones are done **sequentially**, one owner at a time. M11–M13 are a
-post-review correction pass — see `docs/MILESTONES_M11-M13.md`.
-
-## Report deliverables
-
-`notebooks/10_report.ipynb` runs no experiments — it reads `results/*.csv` and
-emits the guide's Part-5 checklist:
-
-| Artifact | What it is |
+| Question | What we measured |
 |---|---|
-| `results/master_order_table.csv` | every (tier, arm, solver): theoretical order, measured slope, fit window, R² |
-| `results/crossover_summary.csv` | `h*` and `nfe3*` per testbed and κ — the headline result |
-| `results/predictions_ledger.csv` | the guide's six predictions and the 2026-09-24 review's eight, each marked confirmed / refuted / narrowed / pending **from the data** (`source` column says which) |
-| `results/matched_protocol_slopes.csv` | measured order under the asymptotic and the practitioner protocol, all three tiers side by side |
-| `results/reparam_gain.csv` | what the λ-reparameterisation buys: error of arm A / arm B, per tier and protocol |
-| `results/tier3_fid_vs_l2.csv` | FID-5k beside the paper's FID and the L2 distance, per sampler at ~10 and ~20 NFE, with ranks |
-| `results/proposal_coverage.csv` | the honest ledger vs the proposal deck: delivered / substituted / dropped / added |
-| `figures/10_error_vs_nfe_all.png` | error vs NFE, every tier, every arm |
-| `figures/10_efficiency_frontier.png` | error per NFE — higher order is not automatically cheaper |
+| Is the implementation right? | Our DDIM and DPM-Solver-1 agree to **5.5 × 10⁻¹⁶**. With an exact score and small steps, every solver reaches its textbook order to within **0.094**. |
+| Does the order hold at practical budgets? | No. At 10–120 NFE down to t = 10⁻³ no solver is in its asymptotic regime: even with an exact score the order misses theory by up to **1.91**, against **2.79** on the real network. |
+| Do explicit solvers blow up near t → 0? | Not on the linear Gaussian, at any condition number up to 10⁸. On the curved mixture, RK4 in t is limited to **h ≤ 0.1998**; stepping in λ removes the limit. |
+| What does stepping in λ buy? | RK4's error falls **48×, 8551× and 10.6×** on the three testbeds. For Euler and RK2 the effect is mixed. |
+| At equal cost, when does order 3 beat order 1? | From **5.1, 9.2 and 14.1 NFE** on the three testbeds. The last is on the paper's own checkpoint, and reproduces its unexplained Table 6 result (10–12 NFE). |
+| When does solving the linear part exactly help? | On concentrated data. On data as spread out as the noise, classical steppers are exact and DPM-Solver is not. |
+| Is the best-looking sampler the most accurate? | No. At 10 NFE, FID and distance to the converged image rank the samplers in **exactly opposite order** (rank correlation −1.00). |
 
-FID was cut at Gate G2 and **restored by M11 in a limited role**: FID-5k as an
-anchor to the paper's Table 6 and a counterpoint to L2 — never as the grading
-metric. L2-to-reference remains the primary Tier-3 read-out.
+<p align="center">
+  <img src="figures/11_samples_grid.png" width="620" alt="Generated CIFAR-10 samples: one row per sampler, columns at 10 to 50 network calls, and the converged reference">
+  <br>
+  <sub>One starting noise, six samplers, five budgets. At 10 NFE, DPM-Solver-2 gives a sharp image of something different from where this noise leads; DPM-Solver-1 gives the right image, blurred.</sub>
+</p>
 
-The report is `report/main.tex` → `report/main.pdf`. Build it with `make -C report`
-(latexmk) or `make -C report tectonic` (no TeX install needed: `brew install tectonic`).
-Its FID caveats use the FID floor from `notebooks/11b_fid_floor.ipynb` (Kaggle): real CIFAR-10
-test images follow FID ≈ 3.0×10⁴/N, 5.9 at M11's 5,000 samples.
+## How the study is built
+
+**Three arms** pull apart the paper's two ideas: a new time variable, and exact treatment of the linear part.
+
+| Arm | Solver | Grid | Comparison |
+|---|---|---|---|
+| A | Euler, RK2, RK3, RK4, AB2 on the ODE in `t` | uniform in `t` | baseline |
+| B | the same steppers on the ODE in `λ` (half log-SNR) | uniform in `λ` | A vs B = the change of variable |
+| C | DPM-Solver-1/2/3, the authors' code, unmodified | uniform in `λ` | B vs C = the exact linear part |
+
+**Three testbeds** trade an exact reference answer for realism.
+
+| Tier | Problem | Reference answer | Runs on |
+|---|---|---|---|
+| 1 | anisotropic Gaussian, condition number κ = 1 to 10⁴ | closed form | laptop CPU |
+| 2 | 8 point masses on a Swiss roll (curved score) | SciPy DOP853, rtol 10⁻¹³ | laptop CPU |
+| 3 | the paper's CIFAR-10 DDPM network, [`google/ddpm-cifar10-32`](https://huggingface.co/google/ddpm-cifar10-32) | 201-step run of the same network | Kaggle T4 GPU |
+
+Tiers 1 and 2 feed the solvers an exact noise predictor, so every bit of error is the solver's.
+All comparisons across solvers are at equal **measured** NFE, not equal step counts.
+
+## Quick start
+
+```bash
+git clone https://github.com/MehemudAzad/NUMERICAL-PROJECT.git
+cd NUMERICAL-PROJECT
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+python -m pytest     # 129 tests, a few seconds
+./run_all.sh         # rebuilds every CPU-side figure and results CSV
+```
+
+`run_all.sh` runs the tests and then notebooks 01–08, 12 and 10. On a clean clone it reproduces
+the committed results to 1.8 × 10⁻¹⁵. Options: `--tests-only`, `--no-install`.
+
+<details>
+<summary>macOS: Homebrew Python 3.14 fails to install packages</summary>
+
+Homebrew's `python@3.14` has a broken `pyexpat` on macOS 26, which breaks `pip`. Use
+[uv](https://docs.astral.sh/uv/) with Python 3.12 instead:
+
+```bash
+uv venv --python 3.12 .venv && source .venv/bin/activate
+uv pip install -r requirements.txt
+```
+
+</details>
+
+### GPU notebooks (Tier 3)
+
+Notebooks 09, 11 and 11b need a CUDA GPU. Open them on [Kaggle](https://www.kaggle.com/code)
+with **Accelerator: GPU T4** and **Internet: on**. Each one clones this repository and installs
+its own extras (Diffusers, clean-fid). Their outputs are committed, so everything else runs
+without a GPU.
+
+## Notebooks
+
+| Notebook | What it does | Runs on |
+|---|---|---|
+| [`01_schedule`](notebooks/01_schedule.ipynb) | VP-linear noise schedule and the λ ↔ t map | CPU |
+| [`02_tier1_testbed`](notebooks/02_tier1_testbed.ipynb) | Gaussian testbed: exact score and exact trajectory | CPU |
+| [`03_solvers`](notebooks/03_solvers.ipynb) | classical steppers (arms A and B) and their orders | CPU |
+| [`04_arm_c`](notebooks/04_arm_c.ipynb) | DPM-Solver wrapper; the DDIM ≡ DPM-Solver-1 check | CPU |
+| [`05_convergence`](notebooks/05_convergence.ipynb) | measured order of every solver on Tier 1 | CPU |
+| [`06_stability`](notebooks/06_stability.ipynb) | largest stable step size across κ | CPU |
+| [`07_tier2`](notebooks/07_tier2.ipynb) | mixture testbed, DOP853 reference, order under curvature | CPU |
+| [`08_crossover`](notebooks/08_crossover.ipynb) | where order 3 overtakes order 1 at matched step size | CPU |
+| [`09_tier3_cifar10`](notebooks/09_tier3_cifar10.ipynb) | every solver on the CIFAR-10 network; error decomposition | Kaggle T4 |
+| [`10_report`](notebooks/10_report.ipynb) | reads `results/` and builds every report table and the predictions ledger | CPU |
+| [`11_samples_fid`](notebooks/11_samples_fid.ipynb) | sample grid, FID on 5,000 samples, per-image error | Kaggle T4 |
+| [`11b_fid_floor`](notebooks/11b_fid_floor.ipynb) | FID of real CIFAR-10 images against sample size | Kaggle |
+| [`12_controls`](notebooks/12_controls.ipynb) | controls: both protocols, Tier-2 stability, matched-NFE crossover, when the split helps | CPU |
+
+## Repository layout
+
+```
+src/            numerical engine: schedule, testbeds, steppers, integrator, metrics (no GPU, no plotting)
+tests/          pytest suite (129 tests)
+notebooks/      the experiments above; each writes to results/ and figures/
+results/        every measured number, as CSV
+figures/        every plot, as PNG
+third_party/    the authors' dpm_solver_pytorch.py, unmodified at a pinned commit (MIT)
+report/final/   the submitted ACM report, A_03.pdf, and its LaTeX source
+report/         a longer technical report, main.pdf
+docs/           background: the base paper, the implementation guide, the original proposal
+run_all.sh      one-command reproduction of all CPU-side results
+```
+
+The most useful results files:
+
+| File | Contents |
+|---|---|
+| [`master_order_table.csv`](results/master_order_table.csv) | measured order, fit window and R² for every tier, arm and solver |
+| [`matched_protocol_slopes.csv`](results/matched_protocol_slopes.csv) | the same orders under the asymptotic and the practitioner protocol |
+| [`crossover_matched_nfe.csv`](results/crossover_matched_nfe.csv) | NFE at which DPM-Solver-3 and DPM-Solver-1 cross, per testbed |
+| [`reparam_gain.csv`](results/reparam_gain.csv) | error in t divided by error in λ, per tier and solver |
+| [`tier3_fid_vs_l2.csv`](results/tier3_fid_vs_l2.csv) | FID next to the paper's FID and the trajectory error, with ranks |
+| [`predictions_ledger.csv`](results/predictions_ledger.csv) | each prediction, its verdict and the evidence, computed from the data |
+
+## Report
+
+- **[`report/final/A_03.pdf`](report/final/A_03.pdf)**: the submitted report (ACM `sigconf`, 10 pages).
+- [`report/main.pdf`](report/main.pdf): a longer technical version with full derivations.
+
+Every number in both reports is read from `results/`. To rebuild the submitted one:
+
+```bash
+cd report/final
+latexmk -pdf A_03.tex            # or, without a TeX install: tectonic -X compile A_03.tex
+```
+
+## Team and contributions
+
+| Member | Student ID | Main area |
+|---|---|---|
+| **Mehemud Azad** | 2105014 | project lead; planned all seven experiments; project setup, noise schedule, Gaussian testbed; technical report rewrite; FID floor |
+| **Sayjad Rahman** | 2105021 | classical solvers, DPM-Solver and DDIM, samples and FID, control experiments |
+| **Gourove Roy** | 2105017 | Tier 3 on the real network, shared engine, report tables, reproducibility, reports |
+| **Khalid Hasan Tuhin** | 2105002 | selected the project idea; mixture testbed and reference solution, crossover study |
+| **Niloy Das Robin** | 2105019 | order fitting, Tier-1 convergence, stability analysis |
+
+Each piece of work was committed by the member who built it; `git shortlog -sn` lists commits per
+member (Niloy's commits appear as `BALLISTICrobin`).
+
+<details open>
+<summary><b>Mehemud Azad</b> · 2105014</summary>
+
+- **Project lead.** Led the project and orchestrated the team's work: split it across members, set the working rules, and took each piece from plan to results.
+- **Experiment design.** Planned all seven experiments: the DDIM ≡ DPM-Solver-1 check, convergence order, stability near t → 0, the order-3 vs order-1 crossover, the λ change of variable, when the exact linear split helps, and FID against trajectory error. The plans are the implementation guide (`docs/cse402_guide.html`) and the post-review correction plan in `docs/`.
+- **Project setup:** repository layout, the shared results schema (`src/runlog.py`), test wiring and the vendored DPM-Solver code (`third_party/`).
+- The VP-linear noise schedule and the λ ↔ t conversion (`src/schedule.py`, notebook 01).
+- The Tier-1 Gaussian testbed with its exact score and closed-form trajectory (`src/testbeds.py`, notebook 02).
+- **Technical report.** Rewrote `report/main.tex` after the internal review; most of its current text is this rewrite. Added the controls and FID sections of notebook 10 that feed it.
+- The FID sample-size floor experiment (notebook 11b).
+- Presentation slides.
+
+</details>
+
+<details open>
+<summary><b>Sayjad Rahman</b> · 2105021</summary>
+
+- The classical solvers (Euler, RK2, RK3, RK4, AB2) and the shared integrator that measures NFE (`src/solvers.py`), plus the λ-uniform grids (`src/grids.py`, notebook 03).
+- DPM-Solver-1 and DDIM written by hand, the wrapper around the authors' DPM-Solver code, and the DDIM ≡ DPM-Solver-1 check (`src/dpm.py`, `src/arm_c.py`, notebook 04).
+- Generated sample images and FID on Kaggle (`src/imaging.py`, notebook 11).
+- The control experiments: both protocols, Tier-2 stability, the matched-NFE crossover and when the exact linear split helps (notebook 12).
+
+</details>
+
+<details open>
+<summary><b>Gourove Roy</b> · 2105017</summary>
+
+- **Tier 3 on the real network.** Built `src/tier3.py`, which runs every solver on the CIFAR-10 DDPM network using the checkpoint's own discrete noise schedule, and ran it on a Kaggle T4. [Notebook 09](notebooks/09_tier3_cifar10.ipynb) measures error against NFE for all nine solver and arm combinations, caches the reference runs, measures the reference's own error floor, and splits Tier-3 error into discretisation, `t_end` truncation and that floor (`results/tier3_error.csv`, `results/tier3_decomposition.csv`, `figures/09_*.png`).
+- **Shared engine.** Made the integrator work on GPU tensors as well as NumPy arrays (`src/solvers.py`) and let the ODE take a schedule object (`src/testbeds.py`), so the same code runs all three tiers. Tests: `tests/test_tier3.py`.
+- **Report tables.** [Notebook 10](notebooks/10_report.ipynb) builds the master order table, the crossover summary, the predictions ledger and the proposal-coverage table directly from the results files. Added the floor-aware order fit to `src/metrics.py`. Tests: `tests/test_report.py`.
+- **Reproducibility.** Wrote `run_all.sh` and ran it end to end; the regenerated results matched the committed ones to 1.8 × 10⁻¹⁵.
+- **Reports.** The first version of the technical report (`report/main.tex`, later largely rewritten), and the submitted ACM-format report, [`A_03.pdf`](report/final/A_03.pdf), written from its content.
+
+</details>
+
+<details open>
+<summary><b>Khalid Hasan Tuhin</b> · 2105002</summary>
+
+- **Project idea.** Selected the project's topic at the start.
+- The Tier-2 point-mixture testbed and its DOP853 reference trajectory (`src/testbeds.py`, notebook 07).
+- The crossover study that locates where DPM-Solver-3 overtakes DPM-Solver-1 (`src/crossover.py`, notebook 08).
+
+</details>
+
+<details open>
+<summary><b>Niloy Das Robin</b> · 2105019</summary>
+
+- The sliding-window order fitter (`src/metrics.py`) and the Tier-1 convergence experiment (notebook 05).
+- The bisection test for the largest stable step size and the κ-sweep stability envelope (`src/stability.py`, notebook 06).
+
+</details>
+
+## Acknowledgements
+
+- DPM-Solver by Cheng Lu et al.: [`LuChengTHU/dpm-solver`](https://github.com/LuChengTHU/dpm-solver), vendored unmodified under its MIT licence ([`third_party/LICENSE-dpm-solver`](third_party/LICENSE-dpm-solver)).
+- The CIFAR-10 DDPM checkpoint [`google/ddpm-cifar10-32`](https://huggingface.co/google/ddpm-cifar10-32) (Ho et al., 2020), loaded with [Diffusers](https://github.com/huggingface/diffusers).
+- FID computed with [clean-fid](https://github.com/GaParmar/clean-fid); GPU time from [Kaggle](https://www.kaggle.com/).
+
+```bibtex
+@inproceedings{lu2022dpmsolver,
+  title     = {{DPM-Solver}: A Fast {ODE} Solver for Diffusion Probabilistic Model Sampling in Around 10 Steps},
+  author    = {Lu, Cheng and Zhou, Yuhao and Bao, Fan and Chen, Jianfei and Li, Chongxuan and Zhu, Jun},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {35},
+  pages     = {5775--5787},
+  year      = {2022}
+}
+```

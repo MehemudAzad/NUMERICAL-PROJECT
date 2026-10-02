@@ -35,6 +35,9 @@
 \setcounter{topnumber}{3}
 \setcounter{dbltopnumber}{2}
 \setcounter{totalnumber}{4}
+% Let TeX stretch interword space a little rather than push hyphenated names
+% such as DPM-Solver-1 into the margin.
+\setlength{\emergencystretch}{1.5em}
 
 \definecolor{armA}{HTML}{1F6F8B}
 \definecolor{armB}{HTML}{C7621F}
@@ -64,14 +67,14 @@
 \author{Sayjad Rahman}
 \affiliation{\department{Student ID 2105021}\BUET}
 
-\author{Niloy Das Robin}
-\affiliation{\department{Student ID 2105019}\BUET}
+\author{Gourove Roy}
+\affiliation{\department{Student ID 2105017}\BUET}
 
 \author{Khalid Hasan Tuhin}
 \affiliation{\department{Student ID 2105002}\BUET}
 
-\author{Gourove Roy}
-\affiliation{\department{Student ID 2105017}\BUET}
+\author{Niloy Das Robin}
+\affiliation{\department{Student ID 2105019}\BUET}
 
 \renewcommand{\shortauthors}{Section A, Group 03}
 
@@ -88,24 +91,23 @@
 Diffusion models generate an image by integrating the probability-flow ODE
 from noise to data, and each step costs one evaluation of a large neural
 network (one \NFE). DPM-Solver produces good samples in 10 to 20 \NFE\ by
-solving the linear part of this ODE exactly, and its authors evaluated it with
-FID, a measure of image quality. We evaluate the same solvers as numerical
+solving the linear part of this ODE exactly; its authors evaluated it with
+FID, an image-quality score. We evaluate the same solvers as numerical
 methods, measuring convergence order, stability near the data end of the
 trajectory, and error per \NFE. Three testbeds supply references of decreasing
 exactness: an anisotropic Gaussian with a closed-form trajectory, a point
 mixture integrated with DOP853, and the paper's own CIFAR-10 DDPM network
-compared against a fine-grid run of itself. Three groups of solvers separate
-the paper's two ideas. With an exact score and small steps, every solver
-reaches its textbook order to within 0.094. At the budgets used in practice
-(10 to 120 \NFE, integrating down to $t=10^{-3}$) no solver is in that
-asymptotic regime: with an exact score the measured order still misses theory
-by up to 1.91, against 2.79 on the network. Explicit steppers in $t$ become
-unstable on the curved testbed but never on the linear one, and the $\lam$
-reparameterisation removes the instability. At matched \NFE, third-order
-DPM-Solver overtakes first order at 14 \NFE\ on the paper's checkpoint, which
-reproduces an unexplained anomaly in the paper's Table~6. At 10 \NFE, ranking
-samplers by FID and by distance to the converged image gives exactly opposite
-orders.
+compared against a fine-grid run of itself. Three solver groups separate the
+paper's two ideas. With an exact score and small steps, every solver reaches
+its textbook order to within 0.094. At practical budgets (10 to 120 \NFE,
+down to $t=10^{-3}$) no solver is in that asymptotic regime: even with an
+exact score the order misses theory by up to 1.91, against 2.79 on the
+network. Explicit steppers in $t$ become unstable on the curved testbed but
+not on the linear one, and the $\lam$ reparameterisation removes the
+instability. At matched \NFE, third-order DPM-Solver overtakes first order at
+14 \NFE\ on the paper's checkpoint, reproducing an unexplained anomaly in the
+paper's Table~6. At 10 \NFE, ranking samplers by FID and by distance to the
+converged image gives exactly opposite orders.
 \end{abstract}
 
 \begin{CCSXML}
@@ -410,10 +412,10 @@ $\lVert x_T\rVert$, and report the corresponding largest stable step $h_{\max}$.
 The bisection is checked against a synthetic linear ODE with a known stability
 threshold.
 
-\paragraph{Crossover.} To find where DPM-Solver-3 starts to beat DPM-Solver-1,
-we interpolate both error curves linearly in log-log space and report
-every sign change of $\log e_3-\log e_1$, since the curves can cross more than
-once. We compare the two solvers at matched \NFE, which is the comparison in the
+\paragraph{Crossover.} To find where order 3 starts to beat order 1, we
+interpolate the error curves $e_3$ of DPM-Solver-3 and $e_1$ of DPM-Solver-1
+linearly in log-log space and report every sign change of $\log e_3-\log e_1$,
+since the curves can cross more than once. We compare the two solvers at matched \NFE, which is the comparison in the
 paper's Table~6.
 
 \paragraph{Accuracy versus image quality.} Trajectory error is the $L_2$ distance
@@ -434,7 +436,9 @@ right-hand side, so \NFE\ is measured and never inferred from a formula. The sam
 integrator runs all three tiers: it works on float64 NumPy arrays on Tiers 1 and 2
 and on float32 PyTorch \cite{paszke2019pytorch} CUDA tensors on Tier 3, and the
 probability-flow ODE is defined once, parameterised by a schedule object. Tier 3
-loads the checkpoint with Diffusers \cite{vonplaten2022diffusers}. Tiers 1 and 2
+loads the checkpoint with Diffusers \cite{vonplaten2022diffusers}. Tables are
+assembled with pandas \cite{mckinney2010pandas} and figures drawn with Matplotlib
+\cite{hunter2007matplotlib}. Tiers 1 and 2
 run on a laptop CPU in float64; Tier 3 runs on a Kaggle NVIDIA T4 GPU
 \cite{kaggle}. The repository has 129 unit tests, and \texttt{run\_all.sh}
 regenerates every laptop-side result from a clean clone. Re-running it reproduced
@@ -446,8 +450,8 @@ $4.2\times10^{-5}$.
 Where a convergence study is run, and at what budget, changes what it measures.
 We use two settings (Table~\ref{tab:protocols}). The asymptotic protocol stays away
 from the data end and starts each sweep past the solver's pre-asymptotic region,
-which is the right setting for checking that an implementation has the order the
-theorem promises. The practitioner protocol is the one a user runs and the only
+which is the right setting for checking that an implementation has the order
+promised by the theorem. The practitioner protocol is the one a user runs and the only
 one affordable on Tier 3. Every comparison across tiers uses the practitioner
 protocol.
 
@@ -485,9 +489,9 @@ Tier 2 reference & DOP853, rtol $10^{-13}$, atol $10^{-14}$; rerun at $10^{-11}$
 Tier 3 batch & 64 images, seed 0, float32 \\
 Tier 3 references & DPM-Solver-3 at 201 \NFE; 300 \NFE\ for the floor; $\tend\in\{2,5,10\}\times10^{-3}$ for truncation \\
 Tier 3 budgets & 10, 12, 15, 20, 30, 50, 80, 120 \NFE \\
-Samples (M11) & 6 samplers $\times$ 5 budgets on 8 noises; 64 images per sampler for per-image error \\
+Sample grid & 6 samplers $\times$ 5 budgets on 8 noises; 64 images per sampler for per-image error \\
 FID & 5{,}000 samples per setting, clean-fid, \texttt{legacy\_tensorflow}, CIFAR-10 training statistics \\
-FID floor & real CIFAR-10 test images, 1{,}000 to 10{,}000, three draws each \\
+FID floor & real CIFAR-10 test images: three draws each of 1{,}000, 2{,}000 and 5{,}000; the full 10{,}000 once \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -842,8 +846,8 @@ We rendered samples from six samplers at five budgets (Figure~\ref{fig:grid}) an
 scored them with FID on 5,000 samples each, next to their $L_2$ distance to the
 converged image on a 64-image batch (Table~\ref{tab:fid}).
 
-Our FID ranking agrees with the paper's. At about 10 \NFE, DPM-Solver-2 beats
-DPM-Solver-1 (24.9 against 44.9), DPM-Solver-3 loses to DPM-Solver-1 (143 against
+Our FID ranking agrees with the paper's. At about 10 \NFE, order 2 beats order 1
+(DPM-Solver-2 scores 24.9 against 44.9), order 3 loses to order 1 (143 against
 44.9) and DPM-Solver-fast beats DDIM (31.3 against 39.5). Only the top pair is in a
 different order: DPM-Solver-2 edges DPM-Solver-fast here, while the paper has the
 reverse by a small margin (6.42 against 7.90). This confirms that our Tier-3 setup
@@ -867,8 +871,8 @@ RMS from the converged image.
 \begin{figure}[!htb]
 \centering
 \includegraphics[width=0.82\columnwidth]{11b_fid_floor.png}
-\caption{FID of real CIFAR-10 test images against sample size, three draws per
-size. The dashed line is our converged DPM-Solver-3 at 5,000 samples. Real images
+\caption{FID of real CIFAR-10 test images against sample size (three draws per
+size below 10,000, the whole test set at 10,000). The dashed line is our converged DPM-Solver-3 at 5,000 samples. Real images
 follow $\text{FID}\approx3.0\times10^4/N$, which sets a floor of 5.9 at our sample
 size.}
 \label{fig:floor}
