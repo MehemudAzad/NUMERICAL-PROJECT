@@ -182,7 +182,7 @@ latexmk -pdf A_03.tex            # or, without a TeX install: tectonic -X compil
 
 | Member | Student ID | Main area |
 |---|---|---|
-| **Mehemud Azad** | 2105014 | project lead; planned all seven experiments; project setup, noise schedule, Gaussian testbed; technical report rewrite; FID floor |
+| **Mehemud Azad** | 2105014 | project lead and integration; planned all seven experiments; project setup, noise schedule, Gaussian testbed; report writing; FID floor |
 | **Sayjad Rahman** | 2105021 | classical solvers, DPM-Solver and DDIM, samples and FID, control experiments |
 | **Gourove Roy** | 2105017 | Tier 3 on the real network, shared engine, report tables, reproducibility, reports |
 | **Khalid Hasan Tuhin** | 2105002 | selected the project idea; mixture testbed and reference solution, crossover study |
@@ -195,11 +195,12 @@ member (Niloy's commits appear as `BALLISTICrobin`).
 <summary><b>Mehemud Azad</b> · 2105014</summary>
 
 - **Project lead.** Led the project and orchestrated the team's work: split it across members, set the working rules, and took each piece from plan to results.
+- **Integration.** Put the members' parts together and made sure the whole pipeline runs end to end.
 - **Experiment design.** Planned all seven experiments: the DDIM ≡ DPM-Solver-1 check, convergence order, stability near t → 0, the order-3 vs order-1 crossover, the λ change of variable, when the exact linear split helps, and FID against trajectory error. The plans are the implementation guide (`docs/cse402_guide.html`) and the post-review correction plan in `docs/`.
 - **Project setup:** repository layout, the shared results schema (`src/runlog.py`), test wiring and the vendored DPM-Solver code (`third_party/`).
 - The VP-linear noise schedule and the λ ↔ t conversion (`src/schedule.py`, notebook 01).
 - The Tier-1 Gaussian testbed with its exact score and closed-form trajectory (`src/testbeds.py`, notebook 02).
-- **Technical report.** Rewrote `report/main.tex` after the internal review; most of its current text is this rewrite. Added the controls and FID sections of notebook 10 that feed it.
+- **Report writing.** Rewrote the technical report, `report/main.tex`, after the internal review; most of its current text is this rewrite. Added the controls and FID sections of notebook 10 that feed it. Did the final revision of the submitted report, [`A_03.pdf`](report/final/A_03.pdf): its title, the figure showing how diffusion turns noise into an image, the summary table of the seven experiments, the added figures and the corrections.
 - The FID sample-size floor experiment (notebook 11b).
 - Presentation slides.
 
