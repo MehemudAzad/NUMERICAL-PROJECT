@@ -1140,8 +1140,14 @@ clean clone. The Tier-3 notebooks run on a Kaggle T4.
   runs all three tiers; the report tables and predictions ledger, and the
   floor-aware order fit; the reproduction script \texttt{run\_all.sh}; the first
   version of the technical report and this ACM-format report.
-\item \textbf{Khalid Hasan Tuhin} (2105002): selected the project idea; the Tier-2
-  point-mixture testbed and its DOP853 reference; the crossover study.
+\item \textbf{Khalid Hasan Tuhin} (2105002): selected the project idea; designed
+  and built the Tier-2 testbed (\texttt{mog8}, an 8-mode mixture on a Swiss roll
+  whose exact score makes the probability-flow ODE nonlinear), with its DOP853
+  reference and convergence check, which every Tier-2 result in the order,
+  stability and crossover sections runs on; the Tier-2 convergence experiment; the
+  crossover study: the crossing finder that the matched-\NFE\ crossover reuses, and
+  the equal-step-size crossover on Tier 1 across five decades of $\kappa$ and on
+  Tier 2.
 \item \textbf{Niloy Das Robin} (2105019): the sliding-window order fitter and the
   Tier-1 convergence experiment; the bisection for the largest stable step and the
   $\kappa$-sweep stability study.
