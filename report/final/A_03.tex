@@ -403,6 +403,7 @@ model.}
 \end{figure*}
 
 \subsection{The Tier-3 schedule}
+\label{sec:tier3sched}
 
 The checkpoint was trained with 1000 discrete noise levels, and the authors' code
 interpolates $\log\alpha$ linearly between them. This discretised schedule
@@ -879,6 +880,7 @@ $\lVert x_{300}-x_{201}\rVert$.}
 \end{figure}
 
 \subsection{Tier-3 error and its components}
+\label{sec:tier3}
 
 Figure~\ref{fig:t3} shows Tier-3 error against \NFE\ for all nine solver and arm
 combinations. Total error on Tier 3 has three parts, and each can be measured
@@ -1021,7 +1023,7 @@ turned out to depend on curvature and not on $\kappa$; RK4 loses to DPM-Solver-3
 \NFE\ only on Tier 3; and the FID sample-size floor explains about half of our gap to
 the paper's absolute values.
 
-\begin{table}[H]
+\begin{table}[!tb]
 \caption{Predictions made before any sweep (C: confirmed, N: narrowed).}
 \label{tab:ledger}
 \footnotesize
@@ -1039,7 +1041,7 @@ Arm B can lose to arm A at low \NFE & C & at the coarsest shared budget, all tie
 \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[!tb]
 \caption{Predictions added after the internal review.}
 \label{tab:ledger2}
 \footnotesize
@@ -1135,11 +1137,36 @@ clean clone. The Tier-3 notebooks run on a Kaggle T4.
   around the authors' code and the DDIM $\equiv$ DPM-Solver-1 check; the samples and
   FID on Kaggle; the control experiments (both protocols, Tier-2 stability, the
   matched-\NFE\ crossover, when the exact linear part helps).
-\item \textbf{Gourove Roy} (2105017): Tier 3 on the real network (the checkpoint's
-  own schedule, the Kaggle runs and the error decomposition); the shared engine that
-  runs all three tiers; the report tables and predictions ledger, and the
-  floor-aware order fit; the reproduction script \texttt{run\_all.sh}; the first
-  version of the technical report and this ACM-format report.
+\item \textbf{Gourove Roy} (2105017): Tier 3 on the real network, the shared
+  engine that runs all three tiers, the report tables, the reproduction script and
+  the reports.
+
+  \smallskip\noindent \emph{Tier 3.} The Tier-3 engine (\texttt{src/tier3.py}),
+  which runs every solver on the CIFAR-10 DDPM network with the checkpoint's own
+  discrete noise schedule and uses the identity $f=\sigma^2\lam'$ to keep arms A and
+  B the same ODE (Section~\ref{sec:tier3sched}). \textbf{Notebook~09}
+  (\texttt{notebooks/}\allowbreak\texttt{09\_tier3\_cifar10.ipynb}), run on a
+  Kaggle T4: error against \NFE\ for all nine solver and arm combinations, the cached
+  reference runs, the reference's own error floor, and the split of Tier-3 error into
+  discretisation, $\tend$ truncation and that floor (Section~\ref{sec:tier3},
+  Figures~\ref{fig:t3} and~\ref{fig:decomp}, Table~\ref{tab:decomp}).
+
+  \smallskip\noindent \emph{Shared engine.} The integrator that runs on GPU tensors
+  as well as NumPy arrays, and the probability-flow ODE written once with the schedule
+  as a parameter, so the same code runs Tiers 1, 2 and 3.
+
+  \smallskip\noindent \emph{Report tables.} \textbf{Notebook~10}
+  (\texttt{notebooks/}\allowbreak\texttt{10\_report.ipynb}), which builds the master
+  order table, the crossover summary, the predictions ledger and the
+  proposal-coverage table directly from the results files
+  (Tables~\ref{tab:ledger} and~\ref{tab:ledger2}, Figure~\ref{fig:frontier}); the
+  floor-aware order fit that recovers DPM-Solver-3's order of 2.995 on the network
+  (Section~\ref{sec:practical}).
+
+  \smallskip\noindent \emph{Reproducibility and reports.} The script
+  \texttt{run\_all.sh}, run end to end, which reproduced the committed results to
+  $1.8\times10^{-15}$; the unit tests for Tier 3 and for the report tables; the first
+  version of the technical report, and this ACM-format report.
 \item \textbf{Khalid Hasan Tuhin} (2105002): selected the project idea; designed
   and built the Tier-2 testbed (\texttt{mog8}, an 8-mode mixture on a Swiss roll
   whose exact score makes the probability-flow ODE nonlinear), with its DOP853
