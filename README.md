@@ -1,8 +1,8 @@
 <div align="center">
 
-# Order, Cost & Stability in Diffusion Sampling
+# A Numerical Analysis of DPM-Solver
 
-**A numerical-analysis audit of DPM-Solver**
+**Convergence, stability and cost in fast diffusion sampling**
 
 CSE 402 · Numerical Analysis, Simulation & Modeling · BUET · **Section A, Group 03**
 
@@ -25,6 +25,12 @@ integrate the *probability-flow ODE* back to data, with one call to a large
 neural network at every step. DPM-Solver ([Lu et al., NeurIPS 2022](https://arxiv.org/abs/2206.00927))
 cut the number of calls from hundreds to 10–20, and its authors judged it by
 FID, an image-quality score.
+
+<p align="center">
+  <img src="report/final/figures/diffusion_forward_reverse.png" width="760" alt="Top: a CIFAR-10 car image dissolving into noise as t goes from 0 to 1. Bottom: DPM-Solver-3 turning pure noise into a red car as t goes from 1 to 0.001, with the network's estimate of the final image at each step">
+  <br>
+  <sub>(a) Training adds noise to real images; (b) generation solves the ODE back from pure noise, here with DPM-Solver-3 in 45 network calls.</sub>
+</p>
 
 We judge it the way numerical analysis judges any ODE solver:
 

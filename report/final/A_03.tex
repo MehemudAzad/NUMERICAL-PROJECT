@@ -22,7 +22,10 @@
 \usepackage{float}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,fit,backgrounds,decorations.pathreplacing}
-\graphicspath{{../../figures/}{./}}
+% figures/ here holds report-only images: the forward/reverse figure and copies
+% of four ../../figures/ plots with their on-plot titles cropped (the captions
+% replace them). It is searched first, so those copies win.
+\graphicspath{{./figures/}{../../figures/}{./}}
 
 % Let pages carry more floats, so the full-width ones do not queue up and get
 % pushed past the references.
@@ -57,9 +60,10 @@
 
 \begin{document}
 
-\title{Order, Cost and Stability in Diffusion Sampling}
-\subtitle{A numerical-analysis audit of DPM-Solver.
-  CSE 402 final project report, Section A, Group 03}
+\title{A Numerical Analysis of DPM-Solver: Convergence, Stability and Cost in
+  Fast Diffusion Sampling}
+\subtitle{CSE 402 Final Project Report \textperiodcentered{} Section A
+  \textperiodcentered{} Group 03}
 
 \author{Mehemud Azad}
 \affiliation{\department{Student ID 2105014}\BUET}
@@ -144,15 +148,41 @@ methods, convergence order, numerical stability, exponential integrators}
 
 \subsection{Background}
 
-A diffusion model is trained to remove noise from a corrupted image
-\cite{ho2020ddpm,song2021sde}. To sample from it, one starts from Gaussian
-noise at time $t=1$ and integrates a deterministic ODE, the probability-flow
-ODE, down to a small time $\tend$, where the state is an image
-\cite{song2021sde}. Each evaluation of the right-hand side is one forward pass
-of the network, and that pass dominates the cost. The number of function
-evaluations (\NFE) is therefore the unit of cost, and the practical question
-is how few evaluations a solver can take before the result degrades. Early
-samplers used 100 to 1000 steps \cite{ho2020ddpm,song2021ddim}.
+A diffusion model generates an image by reversing a noising process
+\cite{ho2020ddpm,song2021sde}. In the forward process a real image $x(0)$ is
+mixed with Gaussian noise, $x(t)=\alpha(t)\,x(0)+\sigma(t)\,\eps$, where the
+signal weight $\alpha$ falls and the noise weight $\sigma$ rises as $t$ runs from
+0 to 1. By $t=1$ nothing of the image is left (Figure~\ref{fig:diffusion}a). This
+direction is a formula and needs no network. A neural network $\eps(x,t)$ is
+trained to predict the noise contained in $x(t)$, and it is the only learned part
+of the model.
+
+To generate an image, one starts from pure noise at $t=1$ and integrates a
+deterministic ODE, the probability-flow ODE, back to a small time $\tend$, where
+the state is an image \cite{song2021sde} (Figure~\ref{fig:diffusion}b). At every
+step the network's prediction also gives an estimate of the finished image,
+$\hat x_0=(x-\sigma\eps)/\alpha$; in the figure the layout of the picture is
+already fixed by $t\approx0.4$, and the remaining steps add detail. Each
+evaluation of the ODE's right-hand side is one forward pass of the network, and
+that pass dominates the cost. The number of function evaluations (\NFE) is
+therefore the unit of cost, and the practical question is how few evaluations a
+solver can take before the result degrades. Early samplers used 100 to 1000 steps
+\cite{ho2020ddpm,song2021ddim}.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.94\textwidth]{diffusion_forward_reverse.png}
+\caption{From noise to an image, on the CIFAR-10 checkpoint we study. (a) The
+forward process mixes a real CIFAR-10 test image with Gaussian noise; at $t=1$
+the image is gone. (b) Generation runs the other way: DPM-Solver-3 integrates the
+probability-flow ODE from pure noise at $t=1$ to $t=10^{-3}$ with the
+\texttt{google/ddpm-cifar10-32} network, in five segments that stop at the times
+shown (45 network calls). Top row: the state $x(t)$ that the solver carries.
+Bottom row: the network's estimate of the finished image at that moment,
+$\hat x_0=(x-\sigma\eps)/\alpha$. Panel (b) is a newly generated image, not the
+one in (a).}
+\label{fig:diffusion}
+\end{figure*}
 
 \subsection{The base paper}
 
@@ -503,6 +533,7 @@ the FID comparison because the paper uses them: DPM-Solver-fast, which mixes ord
 1 to 3 to spend the budget exactly, and DDIM on its quadratic time grid.
 
 \subsection{Validation}
+\label{sec:validation}
 
 The paper shows that DDIM and DPM-Solver-1 are algebraically the same update, so
 two independent implementations must agree to machine precision. Ours agree to
@@ -516,15 +547,82 @@ three arms share one schedule.
 \section{Results and discussion}
 % =====================================================================
 
+We ran seven experiments. Table~\ref{tab:summary} lists what each one asks and what
+it found; the subsections below give the measurements behind each row.
+
+\begin{table*}[t]
+\caption{The seven experiments at a glance: the question each one asks, and the
+answer the measurements give.}
+\label{tab:summary}
+\small
+\begin{tabular}{@{}r@{\hspace{6pt}}p{2.9cm}p{4.0cm}p{7.6cm}l@{}}
+\toprule
+& Experiment & Question & Result & Section \\
+\midrule
+1 & DDIM $\equiv$ DPM-Solver-1 & Is our implementation exact? &
+  The two updates agree to $5.5\times10^{-16}$; DPM-Solver-1 measures order 0.99. &
+  \ref{sec:validation} \\
+2 & Convergence order & Does the error fall at the textbook rate? &
+  With an exact score and small steps, every solver is within 0.094 of theory. At
+  10 to 120 \NFE\ down to $t=10^{-3}$ the order misses theory by up to 1.91 with an
+  exact score and 2.79 on the network. & \ref{sec:order}, \ref{sec:practical} \\
+3 & Stability near $t\to0$ & Do large steps diverge near the data? &
+  Linear testbed: never, up to $\kappa=10^8$. Curved testbed: RK4 in $t$ is limited
+  to $h\le0.1998$. Stepping in $\lam$: never. & \ref{sec:stability} \\
+4 & Crossover at equal cost & When does order 3 beat order 1? &
+  From 5.1, 9.2 and 14.1 \NFE\ on Tiers 1, 2 and 3; the paper's Table~6 puts it
+  between 10 and 12. & \ref{sec:crossover} \\
+5 & Change of variable (A vs B) & What does stepping in $\lam$ buy? &
+  RK4's error falls $48\times$, $8551\times$ and $10.6\times$ on the three tiers; for
+  Euler and RK2 the effect is mixed. & \ref{sec:reparam} \\
+6 & Exact linear part (B vs C) & When does it help? &
+  On concentrated data (ahead at 83 to 100\% of points for $s<10^{-2}$). For data as
+  spread out as the noise ($s=1$) classical steppers are exact and DPM-Solver-1 is
+  not. & \ref{sec:split} \\
+7 & Image quality vs accuracy & Is the best-looking sampler the most accurate? &
+  No. At 10 \NFE\ FID and distance to the converged image rank the samplers in
+  exactly opposite order (rank correlation $-1.00$; $+0.60$ at 20 \NFE). Sample size
+  explains about half of the gap to the paper's FIDs. & \ref{sec:fid} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
 \subsection{Order with an exact score}
+\label{sec:order}
 
 Under the asymptotic protocol every solver in every arm reaches its theoretical
-order (Table~\ref{tab:order12}). The largest deviation is $0.094$ on Tier 1 and
-$0.084$ on Tier 2, with mean $R^2$ of $0.99992$ and $0.99996$, and moving from the
-linear to the curved testbed shifts no slope by more than $0.059$. Both testbeds
-have analytic scores, so Assumption B.1 holds and the theorem's conclusion holds
-with it. The result also confirms that the published code, driven by an exact
-oracle, implements the method correctly.
+order (Table~\ref{tab:order12}, Figure~\ref{fig:errh}). The largest deviation is
+$0.094$ on Tier 1 and $0.084$ on Tier 2, with mean $R^2$ of $0.99992$ and $0.99996$,
+and moving from the linear to the curved testbed shifts no slope by more than
+$0.059$. Both testbeds have analytic scores, so Assumption B.1 holds and the
+theorem's conclusion holds with it. The result also confirms that the published
+code, driven by an exact oracle, implements the method correctly.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{05_error_vs_h.png}
+\caption{Tier 1 ($\kappa=10$), asymptotic protocol: error against step size for
+every solver in every arm. The slope of each line is its measured order
+(Table~\ref{tab:order12}). DDIM and DPM-Solver-1 lie on top of each other.}
+\label{fig:errh}
+\end{figure}
+
+\paragraph{Cost per \NFE.} Order is defined per step, but a step of RK4 costs four
+network calls and a step of DPM-Solver-$k$ costs $k$. Figure~\ref{fig:frontier}
+puts the Tier-1 errors on a common \NFE\ axis. In the asymptotic regime the higher
+order pays for its extra calls: RK4 in $t$ is 21 times more accurate than
+DPM-Solver-3 at 64 \NFE\ and 121 times at 512. The advantage the paper claims for
+DPM-Solver lies at 10 to 20 \NFE, which these sweeps never visit. Tier 3 does, and
+there DPM-Solver-3 beats RK4 per \NFE\ from 16 to 120 \NFE\ (Figure~\ref{fig:t3}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{10_efficiency_frontier.png}
+\caption{Tier 1 ($\kappa=10$), asymptotic protocol: error against measured \NFE,
+the cost a user pays. RK4 in either variable stays below DPM-Solver-3 at every
+shared budget.}
+\label{fig:frontier}
+\end{figure}
 
 \begin{table}[t]
 \caption{Measured order with an exact score, asymptotic protocol.}
@@ -587,6 +685,7 @@ mostly pre-asymptotic, so neither Tier-3 value is reliable for B/RK4.}
 \end{table*}
 
 \subsection{Order at practical budgets}
+\label{sec:practical}
 
 Table~\ref{tab:order3} repeats the measurement under the practitioner protocol on
 all three tiers. With an exact score and nothing else changed except the interval
@@ -621,6 +720,7 @@ departures appear with an exact score once the protocol matches Tier 3's.}
 \end{figure}
 
 \subsection{Stability}
+\label{sec:stability}
 
 \paragraph{Linear testbed.} For every $\kappa$ from 1 to $10^4$, every stepper in
 both arms is stable on the coarsest grid tried (two steps), and the stress test to
@@ -667,6 +767,7 @@ classical right-hand side cancels and those steppers reach machine precision.}
 \end{figure*}
 
 \subsection{What the change of variable buys}
+\label{sec:reparam}
 
 Arms A and B integrate the same ODE, so their ratio of errors measures the change
 of variable alone (Table~\ref{tab:reparam}). For RK4 the $\lam$ form is more
@@ -698,6 +799,7 @@ practitioner & 1 & 0.69 & 0.85 & \textbf{48.4} \\
 \end{table}
 
 \subsection{When the exact linear treatment helps}
+\label{sec:split}
 
 The two analytic tiers disagree about DPM-Solver's split. On Tier 1 ($\kappa=10$),
 DPM-Solver-1 and -2 lose to the classical stepper of the same order at every budget
@@ -720,6 +822,13 @@ the concentrated end and is consistent with DPM-Solver's success on them. We hav
 not measured that spectrum.
 
 \subsection{The crossover and Table 6}
+\label{sec:crossover}
+
+What is held fixed matters. Compared at the same step size, which gives
+DPM-Solver-3 three times the budget of DPM-Solver-1, the two curves cross at 4.4 to
+5.0 \NFE\ on Tier 1, flat across five decades of $\kappa$, and at 8.9 on Tier 2. The
+fair comparison, and the practical one, holds the budget fixed, so everything below
+is at matched \NFE.
 
 On this checkpoint the paper's Table~6 gives DPM-Solver-3 an FID of 24.37 (at an
 actual 9 \NFE) against 16.69 for DPM-Solver-1 at 10 \NFE, and the order reverses by
@@ -773,7 +882,7 @@ $\lVert x_{300}-x_{201}\rVert$.}
 
 Figure~\ref{fig:t3} shows Tier-3 error against \NFE\ for all nine solver and arm
 combinations. Total error on Tier 3 has three parts, and each can be measured
-without the true score (Table~\ref{tab:decomp}). The floor, the disagreement between
+without the true score (Table~\ref{tab:decomp}, Figure~\ref{fig:decomp}). The floor, the disagreement between
 two references, is $0.368$ in total, or $8\times10^{-4}$ relative to
 $\lVert x\rVert\approx\sqrt{3072}$, which matches the expected float32 precision of
 about $10^{-3}$. Stopping at $\tend=2\times10^{-3}$ instead of $10^{-3}$ moves the
@@ -781,6 +890,17 @@ result by $1.53$, more than DPM-Solver-3's whole discretisation error at 78 \NFE
 ($1.22$). Beyond that budget, extra network calls reduce a component that the choice
 of $\tend$ already outweighs. The paper's Table~4 shows the same effect in FID: the
 type-2 DPM-Solver scores 4.39 at 15 \NFE\ and 5.52 at 20.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{09_tier3_decomposition.png}
+\caption{The three Tier-3 error components on one axis: discretisation error of
+DPM-Solver-1, -2 and -3 against \NFE, the $\tend$ truncation for stopping at
+$2$, $5$ and $10\times10^{-3}$ (horizontal lines), and the reference floor (red,
+dashed). Once a discretisation curve falls below a truncation line, the choice of
+$\tend$ matters more than further network calls.}
+\label{fig:decomp}
+\end{figure}
 
 \begin{table}[t]
 \caption{The three components of Tier-3 error.}
@@ -841,6 +961,7 @@ converged    & 99 & 16.5 & ${\sim}5.25$ & & \\
 \end{figure*}
 
 \subsection{Samples, FID and trajectory error}
+\label{sec:fid}
 
 We rendered samples from six samplers at five budgets (Figure~\ref{fig:grid}) and
 scored them with FID on 5,000 samples each, next to their $L_2$ distance to the
@@ -991,11 +1112,38 @@ study to multistep solvers such as DPM-Solver++ and to adaptive step-size contro
 \paragraph{Code availability.} The public repository
 \begin{center}\url{https://github.com/MehemudAzad/NUMERICAL-PROJECT}\end{center}
 contains the engine
-(\texttt{src/}), 129 unit tests, one notebook per milestone, every results file and
+(\texttt{src/}), 129 unit tests, one notebook per experiment, every results file and
 figure, and \texttt{run\_all.sh}, which reproduces the laptop-side results from a
 clean clone. The Tier-3 notebooks run on a Kaggle T4.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
+
+\appendix
+\section{Team contributions}
+
+\begin{itemize}
+\item \textbf{Mehemud Azad} (2105014): project lead, who orchestrated the team's
+  work; planned all seven experiments (the implementation guide and the post-review
+  correction plan); project setup and the shared results schema; the noise schedule
+  and the $\lam\leftrightarrow t$ conversion; the Tier-1 Gaussian testbed; the
+  rewrite of the technical report after the internal review; the FID sample-size
+  floor (Figure~\ref{fig:floor}).
+\item \textbf{Sayjad Rahman} (2105021): the classical steppers and the integrator
+  that measures \NFE; the $\lam$-uniform grids; DPM-Solver-1 and DDIM, the wrapper
+  around the authors' code and the DDIM $\equiv$ DPM-Solver-1 check; the samples and
+  FID on Kaggle; the control experiments (both protocols, Tier-2 stability, the
+  matched-\NFE\ crossover, when the exact linear part helps).
+\item \textbf{Gourove Roy} (2105017): Tier 3 on the real network (the checkpoint's
+  own schedule, the Kaggle runs and the error decomposition); the shared engine that
+  runs all three tiers; the report tables and predictions ledger, and the
+  floor-aware order fit; the reproduction script \texttt{run\_all.sh}; the first
+  version of the technical report and this ACM-format report.
+\item \textbf{Khalid Hasan Tuhin} (2105002): selected the project idea; the Tier-2
+  point-mixture testbed and its DOP853 reference; the crossover study.
+\item \textbf{Niloy Das Robin} (2105019): the sliding-window order fitter and the
+  Tier-1 convergence experiment; the bisection for the largest stable step and the
+  $\kappa$-sweep stability study.
+\end{itemize}
 
 \end{document}
